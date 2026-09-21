@@ -1,0 +1,29 @@
+{
+  "name": "pool",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "description": "A local-first library of web/app design references. Static site, no build step.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YLynnLee/Pool.git"
+  },
+  "homepage": "https://github.com/YLynnLee/Pool#readme",
+  "bugs": {
+    "url": "https://github.com/YLynnLee/Pool/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node scripts/server.js --open",
+    "test": "node --test",
+    "drain": "node scripts/drain-run.js",
+    "inbox": "node scripts/inbox.js",
+    "capture": "node scripts/capture.js",
+    "commit": "node scripts/commit.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

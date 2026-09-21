@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/YLynnLee/Pool/security/advisories/new
+    about: Report a security issue privately, not as a public issue. See SECURITY.md.
+  - name: How the drain works
+    url: https://github.com/YLynnLee/Pool/blob/main/docs/agents/drain.md
+    about: Read the drain procedure before opening an issue about capturing references.
