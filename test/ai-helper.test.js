@@ -20,9 +20,9 @@ test('mergeConfig: a blank key keeps the saved one; clearKey removes it', () => 
 });
 
 test('mergeConfig: choosing an agent preset fills its command; an edit overrides it', () => {
-  const next = config.mergeConfig(config.DEFAULT_CONFIG, { agent: { preset: 'gemini' } });
-  assert.equal(next.agent.command, 'gemini --yolo -p');
-  assert.equal(config.mergeConfig(next, { agent: { command: ' gemini -m x -p ' } }).agent.command, 'gemini -m x -p');
+  const next = config.mergeConfig(config.DEFAULT_CONFIG, { agent: { preset: 'antigravity' } });
+  assert.equal(next.agent.command, 'agy --dangerously-skip-permissions --print-timeout 60m -p');
+  assert.equal(config.mergeConfig(next, { agent: { command: ' agy --model x -p ' } }).agent.command, 'agy --model x -p');
 });
 
 test('publicConfig never exposes a key, only where it comes from', () => {

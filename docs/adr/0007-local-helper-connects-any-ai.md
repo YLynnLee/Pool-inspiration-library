@@ -37,7 +37,7 @@ plain http except to this computer, and is masked if a provider quotes it back i
 written into the file by an older version is moved into the store on first load.
 
 - **Agent app.** The helper runs a headless agent CLI with `prompts/drain.md` as its last
-  argument. Presets cover Claude Code, Codex, Gemini CLI, OpenCode, Pi and Hermes. The command is
+  argument. Presets cover Claude Code, Codex, Antigravity CLI, OpenCode, Pi and Hermes. The command is
   editable, and anything else can be typed in. The agent uses its own login, tools and model. This
   is the nightly job's mechanism (0003/0006), now reachable from the UI.
 - **Model API.** The helper runs the drain itself (`scripts/ai/api-drain.js`): it lists the inbox,

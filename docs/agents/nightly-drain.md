@@ -56,7 +56,7 @@ Starting points for common agents. Flags change between releases, so check them 
 | --- | --- |
 | Claude Code (default) | `claude --print --dangerously-skip-permissions` |
 | Codex CLI | `codex exec --dangerously-bypass-approvals-and-sandbox` |
-| Gemini CLI | `gemini --yolo -p` |
+| Antigravity CLI | `agy --dangerously-skip-permissions --print-timeout 60m -p` |
 | OpenCode | `opencode run` (grant shell/edit permissions in `opencode.json`) |
 
 Whichever you pick, it needs to run without asking for approval (nobody is awake to click

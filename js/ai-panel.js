@@ -310,10 +310,30 @@
 
   // A numbered step: its title, whether it's already done, and its content.
   function step(number, title, done, children) {
-    return el('li', { class: 'ai-step' + (done ? ' is-done' : '') }, [
-      el('span', { class: 'ai-step-mark', 'aria-hidden': 'true', text: done ? '✓' : String(number) }),
-      el('div', { class: 'ai-step-body' }, [el('p', { class: 'ai-step-title', text: title + (done ? ' — done' : '') })].concat(children || [])),
+    var li = el('li', { class: 'ai-step' }, [
+      el('span', { class: 'ai-step-mark', 'aria-hidden': 'true', text: String(number) }),
+      el('div', { class: 'ai-step-body' }, [el('p', { class: 'ai-step-title', text: title })].concat(children || [])),
     ]);
+    if (done) markStepDone(li);
+    return li;
+  }
+
+  // Ticks a step off in place — when a login window opens or a connection
+  // passes, without re-rendering the guide.
+  function markStepDone(li) {
+    if (li.classList.contains('is-done')) return;
+    li.classList.add('is-done');
+    li.querySelector('.ai-step-mark').textContent = '✓';
+    li.querySelector('.ai-step-title').textContent += ' — done';
+  }
+
+  // AIs whose login window has been opened this session, so step 2 stays
+  // ticked when the guide re-renders (e.g. after "Check again").
+  var loginOpened = {};
+
+  function isConnectedTo(aiId, mode) {
+    var connection = cached.config.connection;
+    return !!(connection && connection.ai === aiId && (!mode || cached.config.mode === mode));
   }
 
   function statusLine() {
@@ -332,7 +352,9 @@
     mount([view]);
 
     var busy = false;
-    function connectWith(update, status, button) {
+    // doneStep, when given, is ticked on success and left on screen for a
+    // moment before the guide gives way to the "Connected" view.
+    function connectWith(update, status, button, doneStep) {
       if (busy) return;
       busy = true;
       button.disabled = true;
@@ -341,7 +363,13 @@
         cached = r.status;
         notify();
         if (!r.ok) throw new Error(r.message);
-        showConnected(r.message);
+        if (!doneStep) return showConnected(r.message);
+        markStepDone(doneStep);
+        setStatus(status, r.message);
+        var shown = current;
+        setTimeout(function () {
+          if (current === shown) showConnected(r.message);
+        }, 1200);
       }).catch(function (err) {
         setStatus(status, err.message, true);
       }).then(function () {
@@ -476,13 +504,31 @@
       var installStatus = statusLine();
       var loginStatus = statusLine();
       var connectStatus = statusLine();
+      var connected = isConnectedTo(ai.id, 'agent');
+      var loginStep, connectStep;
       var connectBtn = el('button', { class: 'add-modal-save', type: 'button', text: 'Connect' });
       connectBtn.addEventListener('click', function () {
-        connectWith({ ai: ai.id, mode: 'agent', agent: { preset: m.preset } }, connectStatus, connectBtn);
+        connectWith({ ai: ai.id, mode: 'agent', agent: { preset: m.preset } }, connectStatus, connectBtn, connectStep);
       });
       if (!installed) connectBtn.disabled = true;
-      var loginBtn = terminalButton('Log in to ' + m.app, { ai: ai.id, action: 'login' }, loginStatus);
+      var loginBtn = terminalButton('Log in to ' + m.app, { ai: ai.id, action: 'login' }, loginStatus, function () {
+        loginOpened[ai.id] = true;
+        markStepDone(loginStep);
+      });
       if (!installed) loginBtn.disabled = true;
+
+      loginStep = step(2, 'Log in', installed && (connected || !!loginOpened[ai.id]), [
+        el('p', { class: 'ai-hint', text: 'Needs ' + m.needs.charAt(0).toLowerCase() + m.needs.slice(1) }),
+        el('p', { class: 'ai-hint', text: m.login.steps }),
+        el('div', { class: 'ai-row' }, [loginBtn]),
+        loginStatus,
+        el('p', { class: 'ai-hint', text: 'Already logged in? Skip to step 3.' }),
+      ]);
+      connectStep = step(3, 'Connect', installed && connected, [
+        el('p', { class: 'ai-hint', text: 'The library checks ' + m.app + ' answers, then Drain is ready.' }),
+        el('div', { class: 'ai-row' }, [connectBtn]),
+        connectStatus,
+      ]);
 
       return [
         step(1, 'Install ' + m.app, installed, installed ? [] : [
@@ -499,18 +545,8 @@
             el('a', { href: m.docs, target: '_blank', rel: 'noopener', text: 'install guide ↗' }),
           ]),
         ]),
-        step(2, 'Log in', false, [
-          el('p', { class: 'ai-hint', text: 'Needs ' + m.needs.charAt(0).toLowerCase() + m.needs.slice(1) }),
-          el('p', { class: 'ai-hint', text: m.login.steps }),
-          el('div', { class: 'ai-row' }, [loginBtn]),
-          loginStatus,
-          el('p', { class: 'ai-hint', text: 'Already logged in? Skip to step 3.' }),
-        ]),
-        step(3, 'Connect', false, [
-          el('p', { class: 'ai-hint', text: 'The library checks ' + m.app + ' answers, then Drain is ready.' }),
-          el('div', { class: 'ai-row' }, [connectBtn]),
-          connectStatus,
-        ]),
+        loginStep,
+        connectStep,
       ];
     }
 
@@ -525,6 +561,7 @@
       var key = el('input', { class: 'add-modal-input ai-mono', type: 'password', autocomplete: 'off', 'aria-label': 'API key', placeholder: hasEnvKey(m.provider) ? 'Found $' + provider.keyEnv + ' — leave empty to use it' : 'Paste your API key' });
       var next = el('button', { class: 'add-modal-cancel', type: 'button', text: 'Continue' });
       var chooser = el('div', { class: 'ai-row', hidden: 'hidden' });
+      var connectStep;
       next.addEventListener('click', function () {
         next.disabled = true;
         setStatus(status, 'Checking the key…');
@@ -538,7 +575,7 @@
           select.value = r.suggested || r.models[0];
           var connectBtn = el('button', { class: 'add-modal-save', type: 'button', text: 'Connect' });
           connectBtn.addEventListener('click', function () {
-            connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, apiKey: key.value, model: select.value } }, status, connectBtn);
+            connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, apiKey: key.value, model: select.value } }, status, connectBtn, connectStep);
           });
           chooser.appendChild(select);
           chooser.appendChild(connectBtn);
@@ -554,7 +591,7 @@
             el('a', { href: m.keyUrl, target: '_blank', rel: 'noopener', text: 'Get a key ↗' }),
           ]),
         ]),
-        step(2, 'Paste it and pick a model', false, [
+        connectStep = step(2, 'Paste it and pick a model', isConnectedTo(ai.id, 'api'), [
           el('div', { class: 'ai-row' }, [key, next]),
           chooser,
           status,
@@ -573,9 +610,10 @@
         return el('option', { value: id, text: id });
       }));
       if (server && server.suggested) select.value = server.suggested;
+      var connectStep;
       var connectBtn = el('button', { class: 'add-modal-save', type: 'button', text: 'Connect' });
       connectBtn.addEventListener('click', function () {
-        connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, model: select.value } }, status, connectBtn);
+        connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, model: select.value } }, status, connectBtn, connectStep);
       });
       if (!models.length) connectBtn.disabled = true;
 
@@ -598,7 +636,7 @@
           el('div', { class: 'ai-row' }, [checkAgainButton(rerender)]),
         ]),
         step(2, 'Get a model that can see images', running && models.length > 0, modelStepBody),
-        step(3, 'Choose it and connect', false, models.length ? [el('div', { class: 'ai-row' }, [select, connectBtn]), status] : [el('p', { class: 'ai-hint', text: 'Your downloaded models will appear here.' })]),
+        connectStep = step(3, 'Choose it and connect', running && isConnectedTo(ai.id, 'api'), models.length ? [el('div', { class: 'ai-row' }, [select, connectBtn]), status] : [el('p', { class: 'ai-hint', text: 'Your downloaded models will appear here.' })]),
       ];
     }
 

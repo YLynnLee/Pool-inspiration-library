@@ -24,7 +24,7 @@ Inspiration Library runs entirely on your machine. There is no server, no accoun
 ## The one real risk: agents with permission prompts off
 
 The agent presets (`claude --dangerously-skip-permissions`, `codex --dangerously-bypass-…`,
-`gemini --yolo`, …) run unattended, so they can't stop to ask before running a command. During a
+`agy --dangerously-skip-permissions`, …) run unattended, so they can't stop to ask before running a command. During a
 drain the agent reads text from websites you captured, and a hostile page could try to instruct it
 (prompt injection). Mitigations:
 

@@ -2,7 +2,7 @@
 // (docs/adr/0007-local-helper-connects-any-ai.md):
 //
 //   agent — hand the whole drain to an agent CLI the collector already uses
-//           (Claude Code, Codex, Gemini CLI, OpenCode, Pi, Hermes, …). The
+//           (Claude Code, Codex, Antigravity CLI, OpenCode, Pi, Hermes, …). The
 //           agent runs docs/agents/drain.md itself.
 //   api   — the helper runs the drain and calls a model API directly
 //           (Anthropic, OpenAI, Gemini, OpenRouter, Ollama, LM Studio, or any
@@ -26,7 +26,8 @@ var CONFIG_FILE = path.join(ROOT, '.drain.config.json');
 var AGENT_PRESETS = [
   { id: 'claude', label: 'Claude Code', command: 'claude --print --dangerously-skip-permissions' },
   { id: 'codex', label: 'Codex CLI', command: 'codex exec --dangerously-bypass-approvals-and-sandbox' },
-  { id: 'gemini', label: 'Gemini CLI', command: 'gemini --yolo -p' },
+  // agy's print mode gives up after 5 minutes by default; a drain takes longer.
+  { id: 'antigravity', label: 'Antigravity CLI', command: 'agy --dangerously-skip-permissions --print-timeout 60m -p' },
   { id: 'opencode', label: 'OpenCode', command: 'opencode run' },
   { id: 'pi', label: 'Pi', command: 'pi -p' },
   { id: 'hermes', label: 'Hermes Agent', command: 'hermes chat --yolo -q' },
