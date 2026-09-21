@@ -1,0 +1,17 @@
+{
+  "name": "inspiration-library",
+  "private": true,
+  "license": "MIT",
+  "description": "A local-first library of web/app design references. Static site, no build step.",
+  "scripts": {
+    "start": "node scripts/server.js --open",
+    "test": "node --test test/",
+    "drain": "node scripts/drain-run.js",
+    "inbox": "node scripts/inbox.js",
+    "capture": "node scripts/capture.js",
+    "commit": "node scripts/commit.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

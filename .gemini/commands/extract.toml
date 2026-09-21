@@ -1,0 +1,6 @@
+description = "Extract a design system for one reference from its live site"
+prompt = """
+@{prompts/extract.md}
+
+Reference: {{args}}
+"""

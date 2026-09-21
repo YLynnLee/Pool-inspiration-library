@@ -1,0 +1,25 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Local tooling / agent session state — never shared
+.impeccable/
+.scratch/
+.remember/
+.claude/RESUME.md
+.claude/settings.local.json
+
+# Dependencies
+node_modules/
+
+# Per-machine AI choice for draining. Keys live in the OS secret store, not here (docs/adr/0007)
+.drain.env
+.drain.config.json
+.env
+.env.*
+
+# Local helper app + log for the inspiration-library:// link (docs/adr/0007)
+.helper/
+
+# Half-written atomic saves (scripts/server.js writeAtomic)
+*.tmp-*
