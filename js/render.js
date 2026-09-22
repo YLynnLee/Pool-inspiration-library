@@ -40,6 +40,96 @@
     }));
   }
 
+  // ---- pending purges (see openPurgeModal below) ------------------------
+  // A purge is three writes (library, design system, images), not one
+  // transaction — data/library.js can't be made to roll back a design
+  // system or image write that failed after it, so instead a purge that
+  // gets past step one but not the rest leaves a record here of exactly
+  // what's left. resumePendingPurges retries those leftovers on every
+  // load until they succeed, so a failure never quietly leaves an orphaned
+  // design system or screenshot forever — just until the next load.
+
+  var PENDING_PURGE_KEY = 'pool:pending-purges';
+
+  function getPendingPurges() {
+    try {
+      var raw = window.localStorage.getItem(PENDING_PURGE_KEY);
+      var list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function setPendingPurges(list) {
+    try {
+      window.localStorage.setItem(PENDING_PURGE_KEY, JSON.stringify(list));
+    } catch (err) {
+      /* localStorage unavailable — a failed purge just won't self-heal on reload */
+    }
+  }
+
+  function savePendingPurge(pending) {
+    var list = getPendingPurges().filter(function (p) {
+      return p.id !== pending.id;
+    });
+    list.push(pending);
+    setPendingPurges(list);
+  }
+
+  function clearPendingPurge(id) {
+    setPendingPurges(getPendingPurges().filter(function (p) {
+      return p.id !== id;
+    }));
+  }
+
+  // Retries the leftover design-system removal and/or image deletion for
+  // one pending purge against current state (not the state at the time of
+  // the original failure, since something else may have changed it since).
+  // Never touches data/library.js — that write already succeeded, or this
+  // record wouldn't exist.
+  function finishPendingPurge(pending) {
+    var systemPurge = window.computeDesignSystemPurge(window.getDesignSystems(), [pending.id]);
+    var writeSystem = systemPurge.removed.length === 0
+      ? Promise.resolve()
+      : window.writeDesignSystems(window.serializeDesignSystems(systemPurge.remaining)).then(function () {
+        window.setDesignSystems(systemPurge.remaining);
+      });
+    return writeSystem
+      .then(function () {
+        return (pending.imagePaths || []).length ? window.deleteImages(pending.imagePaths) : [];
+      })
+      .then(function (failedImages) {
+        if (failedImages && failedImages.length) {
+          throw new Error(failedImages.length + ' image file(s) still undeleted');
+        }
+        clearPendingPurge(pending.id);
+        return true;
+      });
+  }
+
+  // Best-effort, silent except when it actually finishes something — this
+  // runs on every load so a purge that failed at 2am because the helper
+  // was briefly unreachable gets finished next time the app is open.
+  function resumePendingPurges() {
+    var pending = getPendingPurges();
+    if (!pending.length) return;
+    var finished = [];
+    pending
+      .reduce(function (chain, p) {
+        return chain.then(function () {
+          return finishPendingPurge(p)
+            .then(function () { finished.push(p.name); })
+            .catch(function (err) { console.warn('Pool: pending purge for ' + p.name + ' still incomplete — ' + err.message); });
+        });
+      }, Promise.resolve())
+      .then(function () {
+        if (!finished.length) return;
+        if (isGridMounted()) refreshGrid();
+        UI.toast('Finished cleaning up after ' + UI.plural(finished.length, 'earlier deletion') + '.');
+      });
+  }
+
   // ---- routing ---------------------------------------------------------
 
   function parseHash() {
@@ -1169,16 +1259,6 @@
     ]);
     wrap.appendChild(row);
 
-    var details = el('details', { class: 'category-details' });
-    details.appendChild(el('summary', { class: 'category-details-summary', text: 'About this style' }));
-    details.appendChild(el('p', { class: 'category-description', text: category.description }));
-    var vocabRow = el('div', { class: 'chip-row category-vocab' });
-    (category.vocabulary || []).forEach(function (word) {
-      vocabRow.appendChild(el('span', { class: 'chip chip-static', text: word }));
-    });
-    details.appendChild(vocabRow);
-    wrap.appendChild(details);
-
     return wrap;
   }
 
@@ -1279,10 +1359,17 @@
       confirmBtn.textContent = 'Purging…';
       setStatus('', false);
 
+      // The library write below is the one irreversible-in-view step: once
+      // it succeeds the entry is gone from the grid no matter what happens
+      // next, so any failure after this point gets recorded as a pending
+      // purge (see above) instead of just a toast — the design system
+      // and/or images it leaves behind won't be silently forgotten.
+      var libraryWritten = false;
       var failedImages = [];
       window
         .writeLibrary(window.serializeLibrary(purge.remaining))
         .then(function () {
+          libraryWritten = true;
           window.setEntries(purge.remaining);
           setHiddenIds(
             getHiddenIds().filter(function (id) {
@@ -1303,18 +1390,25 @@
         .then(function (failed) {
           failedImages = failed || [];
           if (failedImages.length > 0) {
-            refreshGrid();
             throw new Error(
               'Purged, but could not delete ' + failedImages.length + ' image file(s): ' +
-                failedImages.join(', ')
+                failedImages.join(', ') + '. Will retry automatically next time Pool opens.'
             );
           }
+          clearPendingPurge(target.id);
           closePurgeModal();
           if (parseHash().view === 'entry') window.location.hash = '#/';
           else refreshGrid();
           UI.toast('Deleted ' + target.name + '.');
         })
         .catch(function (err) {
+          if (libraryWritten) {
+            // Its library entry is already gone — reflect that regardless
+            // of where the rest of the purge failed, instead of leaving
+            // the grid showing an entry that's no longer actually there.
+            savePendingPurge({ id: target.id, name: target.name, imagePaths: imagePaths });
+            refreshGrid();
+          }
           setStatus((err && err.message) || 'Could not purge. Nothing was changed.', true);
           confirmBtn.disabled = false;
           confirmBtn.textContent = confirmLabel;
@@ -1497,4 +1591,5 @@
   window.addEventListener('hashchange', renderApp);
   window.addEventListener('popstate', renderApp);
   renderApp();
+  resumePendingPurges();
 })();

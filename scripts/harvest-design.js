@@ -377,7 +377,11 @@ function harvestDesign() {
   };
 }
 
-typeof document !== 'undefined' ? harvestDesign() : undefined;
+// capture.js injects this file into a live page and calls harvestDesign()
+// itself; it declares __poolHarvestAutoRunSkip__ first so this line stays a
+// no-op there instead of double-running. Pasted standalone into a console,
+// that variable is undeclared and this runs on its own.
+typeof document !== 'undefined' && typeof __poolHarvestAutoRunSkip__ === 'undefined' ? harvestDesign() : undefined;
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {

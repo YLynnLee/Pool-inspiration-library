@@ -20,6 +20,7 @@ var ai = require('./ai/index.js');
 var lib = require('./drain-lib.js');
 var catalog = require('./ai/catalog.js');
 var curation = require('../js/curation.js');
+var atomicWrite = require('./atomic-write.js').writeAtomic;
 
 var ROOT = path.resolve(__dirname, '..');
 var STATIC_PREFIXES = ['css/', 'js/', 'data/', 'images/', 'fonts/'];
@@ -159,10 +160,7 @@ function readBody(req, limit) {
 var WRITABLE = ['data/library.js', 'data/design-systems.js'];
 
 function writeAtomic(rel, text) {
-  var file = path.join(ROOT, rel);
-  var tmp = file + '.tmp-' + process.pid;
-  fs.writeFileSync(tmp, text);
-  fs.renameSync(tmp, file);
+  atomicWrite(path.join(ROOT, rel), text);
 }
 
 function deleteImages(paths) {

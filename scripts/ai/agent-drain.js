@@ -1,6 +1,6 @@
 // Agent mode: hand the whole drain to an agent CLI the collector already
-// uses, exactly as the nightly job does. The agent reads prompts/drain.md
-// and runs the scripts itself. See SECURITY.md.
+// uses. The agent reads prompts/drain.md and runs the scripts itself. See
+// SECURITY.md.
 
 var fs = require('fs');
 var path = require('path');
@@ -44,7 +44,15 @@ function splitCommand(command) {
 
 function buildPrompt(url) {
   var prompt = fs.readFileSync(path.join(ROOT, 'prompts/drain.md'), 'utf8');
-  return prompt.replace('URL (optional):', 'URL (optional): ' + (url || '(none — drain the whole inbox)')) +
+  var marker = 'URL (optional):';
+  if (prompt.indexOf(marker) === -1) {
+    throw new Error(
+      'prompts/drain.md no longer contains "' + marker + '" — agent-drain.js:buildPrompt ' +
+      'has nowhere to inject the URL. Update this marker (and this function) together with ' +
+      'prompts/drain.md\'s scope section.'
+    );
+  }
+  return prompt.replace(marker, marker + ' ' + (url || '(none — drain the whole inbox)')) +
     '\n\nYou were started from the Pool app, not a terminal: nobody can answer questions ' +
     'mid-run, so follow the procedure without pausing for confirmation.';
 }

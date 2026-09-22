@@ -282,8 +282,10 @@ async function shootPass(page, canvasPage, outDir, native) {
 
 async function harvest(page) {
   var source = fs.readFileSync(path.join(ROOT, 'scripts/harvest-design.js'), 'utf8');
-  source = source.replace(/^typeof document !== 'undefined' \? harvestDesign\(\) : undefined;$/m, '');
-  return page.evaluate('(function () { var module; ' + source + '\n; return harvestDesign(); })()');
+  // __poolHarvestAutoRunSkip__ tells harvest-design.js's own trailing
+  // auto-invoke line to stay a no-op here; we call harvestDesign()
+  // ourselves below. No text-matching against that file's source needed.
+  return page.evaluate('(function () { var module, __poolHarvestAutoRunSkip__ = true; ' + source + '\n; return harvestDesign(); })()');
 }
 
 async function main() {

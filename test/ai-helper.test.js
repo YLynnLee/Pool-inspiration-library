@@ -1,9 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const config = require('../scripts/ai/config.js');
 const providers = require('../scripts/ai/providers.js');
 const apiDrain = require('../scripts/ai/api-drain.js');
 const agentDrain = require('../scripts/ai/agent-drain.js');
+const aiIndex = require('../scripts/ai/index.js');
 
 test('mergeConfig: switching provider resets its URL, model and key', () => {
   const saved = config.mergeConfig(config.DEFAULT_CONFIG, { mode: 'api', api: { apiKey: 'sk-ant-secret' } });
@@ -112,6 +115,18 @@ test('buildPrompt fills the scope into prompts/drain.md', () => {
   assert.match(agentDrain.buildPrompt(), /whole inbox/);
 });
 
+test('buildPrompt fails loudly, not silently, if prompts/drain.md drops its URL marker', () => {
+  const promptPath = path.join(__dirname, '..', 'prompts/drain.md');
+  const original = fs.readFileSync(promptPath, 'utf8');
+  assert.match(original, /URL \(optional\):/, 'prompts/drain.md is expected to carry this exact marker');
+  fs.writeFileSync(promptPath, original.replace('URL (optional):', 'Where should I look?'));
+  try {
+    assert.throws(() => agentDrain.buildPrompt('https://x.example'), /no longer contains/);
+  } finally {
+    fs.writeFileSync(promptPath, original);
+  }
+});
+
 const catalog = require('../scripts/ai/catalog.js');
 const terminal = require('../scripts/ai/terminal.js');
 
@@ -158,11 +173,21 @@ test('connectionLabel names the connection the way the header shows it', () => {
   assert.equal(config.connectionLabel(config.mergeConfig(config.DEFAULT_CONFIG, { mode: 'api', api: { provider: 'custom', model: 'my-model' } })), 'my-model');
 });
 
+test('extractAgentModel: pulls the model line out of an agent test reply', () => {
+  assert.equal(aiIndex.extractAgentModel('OK\nclaude-opus-5'), 'claude-opus-5');
+  assert.equal(aiIndex.extractAgentModel('OK\nModel: gpt-5.1'), 'gpt-5.1');
+  assert.equal(aiIndex.extractAgentModel('OK\nRunning as: "gemini-3-pro"'), 'gemini-3-pro');
+  assert.equal(aiIndex.extractAgentModel('  OK.  \n\n  claude-sonnet-5  \n'), 'claude-sonnet-5');
+});
+
+test('extractAgentModel: returns null when there is nothing but OK', () => {
+  assert.equal(aiIndex.extractAgentModel('OK'), null);
+  assert.equal(aiIndex.extractAgentModel(''), null);
+});
+
 // ---- API keys stay out of the library folder -------------------------------
 
-const fs = require('node:fs');
 const os = require('node:os');
-const path = require('node:path');
 const secrets = require('../scripts/ai/secrets.js');
 
 function tempSetup() {
