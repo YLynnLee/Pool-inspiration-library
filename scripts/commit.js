@@ -19,6 +19,8 @@ var path = require('path');
 var childProcess = require('child_process');
 var curation = require('../js/curation.js');
 var lib = require('./drain-lib.js');
+var lock = require('./lock.js');
+var atomicWrite = require('./atomic-write.js').writeAtomic;
 
 var ROOT = path.resolve(__dirname, '..');
 var FILES = {
@@ -27,6 +29,12 @@ var FILES = {
   categories: path.join(ROOT, 'data/categories.js'),
   designSystems: path.join(ROOT, 'data/design-systems.js'),
 };
+// Every drain path (interactive, the app's Drain button, drain-run.js) ends
+// up here, and every write below is a full rewrite of one of the FILES
+// above, so two commits running at once could silently lose one's
+// additions to the other's. This lock serialises them; see lock.js for why
+// and how.
+var LOCK_FILE = path.join(ROOT, '.scratch/commit.lock');
 
 function load(file, name) {
   delete require.cache[require.resolve(file)];
@@ -84,6 +92,20 @@ function main(argv) {
     return 1;
   }
 
+  // Everything from here on reads then rewrites data/*.js whole, so it all
+  // runs under one lock: a second, overlapping commit.js waits instead of
+  // reading the same pre-write state and clobbering this run's additions
+  // when it writes.
+  fs.mkdirSync(path.dirname(LOCK_FILE), { recursive: true });
+  try {
+    return lock.withLock(LOCK_FILE, function () { return commitLocked(file, result, dryRun, skipLint); });
+  } catch (e) {
+    console.error('Not committed — ' + e.message);
+    return 1;
+  }
+}
+
+function commitLocked(file, result, dryRun, skipLint) {
   var state = {
     library: load(FILES.library, 'LIBRARY'),
     categories: load(FILES.categories, 'CATEGORIES'),
@@ -119,7 +141,7 @@ function main(argv) {
   }
 
   if (!isDrain) {
-    fs.writeFileSync(FILES.designSystems, curation.serializeDesignSystems(lib.upsertDesignSystem(state.designSystems, result.designSystem)));
+    atomicWrite(FILES.designSystems, curation.serializeDesignSystems(lib.upsertDesignSystem(state.designSystems, result.designSystem)));
     console.log('wrote design system for ' + result.designSystem.referenceId);
     return 0;
   }
@@ -132,19 +154,19 @@ function main(argv) {
   if (result.newCategory) {
     var cat = result.newCategory;
     state.categories.push({ id: cat.id, name: cat.name, definition: cat.definition, description: cat.description, vocabulary: cat.vocabulary });
-    fs.writeFileSync(FILES.categories, curation.serializeCategories(state.categories));
+    atomicWrite(FILES.categories, curation.serializeCategories(state.categories));
     console.log('created category ' + cat.id + ' (nearest rejected: ' + result.rejectedCategory + ')');
   }
 
   state.library.push(lib.buildReference(ref, screenshots, new Date().toISOString()));
-  fs.writeFileSync(FILES.library, curation.serializeLibrary(state.library));
+  atomicWrite(FILES.library, curation.serializeLibrary(state.library));
   console.log('added reference ' + ref.id + (ref.status === 'draft' ? ' (draft: ' + ref.draftReason + ')' : ''));
 
-  fs.writeFileSync(FILES.designSystems, curation.serializeDesignSystems(lib.upsertDesignSystem(state.designSystems, result.designSystem)));
+  atomicWrite(FILES.designSystems, curation.serializeDesignSystems(lib.upsertDesignSystem(state.designSystems, result.designSystem)));
   console.log('wrote design system for ' + ref.id);
 
   var inbox = fs.existsSync(FILES.inbox) ? fs.readFileSync(FILES.inbox, 'utf8') : '';
-  fs.writeFileSync(FILES.inbox, curation.removeCaptureLine(inbox, result.line));
+  atomicWrite(FILES.inbox, curation.removeCaptureLine(inbox, result.line));
   console.log('struck inbox line: ' + result.line);
   return 0;
 }

@@ -58,9 +58,7 @@ Unlike a bookmark manager or moodboard tool, every reference is **analysed at ca
 │   ├── harvest-design.js   # In-page design token harvester (colour/type/spacing/radii)
 │   ├── server.js           # Local helper: serves the app, runs drains for the Drain panel
 │   ├── drain-run.js        # Run a drain from the terminal with the panel's chosen AI
-│   ├── ai/                 # Helper internals: config, model API client, both drain modes
-│   ├── nightly-drain.sh    # Automated drain script (any agent CLI or the panel's AI)
-│   └── *.plist             # macOS launchd schedule
+│   └── ai/                 # Helper internals: config, model API client, both drain modes
 ├── docs/
 │   └── agents/             # Agent procedures (drain, extract, drain-result, ...)
 ├── prompts/                # Tool-neutral drain/extract prompts
@@ -146,9 +144,8 @@ Setup for this route: Node 20+, then `npm install` (and `npx playwright install 
 Google Chrome isn't installed). The agent writes `result.json`
 ([format](docs/agents/drain-result.md)) between the last two.
 `commit.js` refuses incomplete or inconsistent results, so a weaker model fails loudly instead of
-corrupting the library. The full procedure is [`docs/agents/drain.md`](docs/agents/drain.md);
-unattended nightly runs with any agent CLI are in
-[`docs/agents/nightly-drain.md`](docs/agents/nightly-drain.md).
+corrupting the library. The full procedure is [`docs/agents/drain.md`](docs/agents/drain.md).
+Every drain is run by hand — there is no scheduled or unattended mode.
 
 ## Design
 

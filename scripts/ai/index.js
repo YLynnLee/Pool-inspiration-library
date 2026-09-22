@@ -1,7 +1,7 @@
 // The helper's one entry point into draining: run a drain, or test that the
 // configured AI is reachable and can see images, in whichever mode the
 // config names. Used by scripts/server.js (the app's Drain panel) and
-// scripts/drain-run.js (terminal and nightly runs).
+// scripts/drain-run.js (terminal runs).
 
 var childProcess = require('child_process');
 var configModule = require('./config.js');
@@ -62,6 +62,18 @@ function onPath(bin) {
   return childProcess.spawnSync(lookup, [bin], { encoding: 'utf8' }).status === 0;
 }
 
+// Pulls the model name out of an agent's two-line test reply ("OK" then the
+// model). Agents vary in how chatty they are even when told not to be, so
+// this takes the last non-empty line that isn't itself just "OK" and trims
+// it down to something label-sized.
+function extractAgentModel(text) {
+  var lines = text.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+  var candidate = lines.filter(function (l) { return !/^ok\.?$/i.test(l); }).pop();
+  if (!candidate) return null;
+  candidate = candidate.replace(/^(model( name)?|running as)\s*[:\-]\s*/i, '').replace(/^["'`]|["'`]$/g, '');
+  return candidate.slice(0, 80) || null;
+}
+
 async function testConnection(config) {
   var problems = configModule.configProblems(config);
   if (problems.length) return { ok: false, message: problems.join(' ') };
@@ -78,12 +90,21 @@ async function testConnection(config) {
     }
     var output = [];
     try {
-      var code = await agentDrain.runAgent(config.agent.command, 'Reply with exactly the word OK and nothing else. Do not run any tools.', {
-        log: function (l) { output.push(l); },
-        timeoutMs: 180000,
-      });
+      var code = await agentDrain.runAgent(
+        config.agent.command,
+        'Reply with exactly two lines and nothing else: the word OK on the first line, ' +
+          'then the exact name of the model you are running as on the second line. Do not run any tools.',
+        { log: function (l) { output.push(l); }, timeoutMs: 180000 }
+      );
       var text = output.join('\n').trim();
-      if (code === 0 && /\bok\b/i.test(text)) return { ok: true, message: argv[0] + ' answered. It will run the drain with its own tools and model.' };
+      if (code === 0 && /\bok\b/i.test(text)) {
+        var model = extractAgentModel(text);
+        return {
+          ok: true,
+          message: argv[0] + ' answered. It will run the drain with its own tools and model' + (model ? ' (' + model + ').' : '.'),
+          model: model,
+        };
+      }
       return { ok: false, message: argv[0] + ' didn’t answer' + (text ? ': “' + text.slice(-300) + '”' : '') + '. If you haven’t logged in yet, do step 2 first.' };
     } catch (e) {
       return { ok: false, message: e.message };
@@ -141,7 +162,9 @@ async function connect(update) {
   draft.connection = null;
   var result = await testConnection(draft);
   if (!result.ok) return result;
-  draft.connection = { label: configModule.connectionLabel(draft), ai: typeof update.ai === 'string' ? update.ai : null, at: new Date().toISOString() };
+  var label = configModule.connectionLabel(draft);
+  if (draft.mode === 'agent' && result.model) label += ' · ' + result.model;
+  draft.connection = { label: label, ai: typeof update.ai === 'string' ? update.ai : null, at: new Date().toISOString() };
   configModule.saveConfig(draft);
   return { ok: true, message: 'Connected to ' + draft.connection.label + '.' };
 }
@@ -176,4 +199,4 @@ async function runDrain(config, options) {
   return apiDrain.runApiDrain(Object.assign({ api: config.api }, options));
 }
 
-module.exports = { testConnection: testConnection, runDrain: runDrain, detect: detect, models: models, connect: connect, disconnect: disconnect, runTerminalAction: runTerminalAction, refreshPath: refreshPath };
+module.exports = { testConnection: testConnection, runDrain: runDrain, detect: detect, models: models, connect: connect, disconnect: disconnect, runTerminalAction: runTerminalAction, refreshPath: refreshPath, extractAgentModel: extractAgentModel };

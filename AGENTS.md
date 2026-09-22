@@ -47,8 +47,5 @@ OpenAI, Gemini, OpenRouter, Ollama, LM Studio, any OpenAI-compatible server). Th
 to the OS secret store, not this file — `scripts/ai/secrets.js`), and `node scripts/drain-run.js` runs the same drain from a terminal. See
 `SECURITY.md`.
 
-### Nightly drain (optional)
-
-The drain can also run unattended on a schedule via `launchd`, with the AI chosen in the app's
-Drain panel or whichever agent CLI you set in `DRAIN_AGENT_CMD`. Entirely opt-in and off by
-default. See `docs/agents/nightly-drain.md` for setup.
+Every drain is started by hand — from `/drain`, the app's Drain button, or `node scripts/drain-run.js`.
+There is no scheduled or unattended mode.
