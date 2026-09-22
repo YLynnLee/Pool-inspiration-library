@@ -17,8 +17,8 @@ No account, no cloud, no subscription to Pool itself. It's just a folder of file
 - [Setting up](#setting-up)
 - [Using the library](#using-the-library)
 - [Connecting your AI](#connecting-your-ai)
-  - [Option A: in the app](#option-a-in-the-app-easiest)
-  - [Option B: from a terminal or code editor](#option-b-from-a-terminal-or-code-editor)
+  - [Option A: from a terminal or code editor](#option-a-from-a-terminal-or-code-editor)
+  - [Option B: in the app](#option-b-in-the-app)
 - [Draining the inbox](#draining-the-inbox)
 - [Good to know](#good-to-know)
 - [Troubleshooting](#troubleshooting)
@@ -48,17 +48,18 @@ scratch every time.
 ## Quick start
 
 1. **Download** this repo and unzip it somewhere permanent, such as `Documents/Pool`.
-2. **Double-click `Start Pool`** (`Start Pool.command` on Mac, `Start Pool.bat` on Windows). The
-   first run sets itself up in about a minute, then opens the library in your browser.
-3. Click **Connect AI** (top right), pick the AI you use, and follow its short guide.
-4. Open **Inbox**, paste a link, then press **Drain**.
+2. **Open the folder** in your terminal-based AI or code editor — Claude Code, Cursor, Codex,
+   OpenCode, Gemini CLI, VS Code with a Claude/Copilot chat, or anything else that reads
+   `AGENTS.md`. Run `npm install` the first time.
+3. Add a link to `inbox.md` (or paste it into the library page — see below), then say
+   **"drain the inbox"**, or type `/drain` if your agent supports slash commands.
 
 Details for each step are below.
 
-**Prefer not to use the app at all?** Skip steps 2–4: just open the downloaded folder in your
-terminal-based AI or code editor — Claude Code, Cursor, Codex, OpenCode, Gemini CLI, VS Code with a
-Claude/Copilot chat, or anything else that reads `AGENTS.md` — and say "drain the inbox". It already
-knows what Pool is and how the library works. See [Option B](#option-b-from-a-terminal-or-code-editor).
+**Prefer a point-and-click app instead?** Double-click **`Start Pool`** in the folder
+(`Start Pool.command` on Mac, `Start Pool.bat` on Windows) to open the library in your browser,
+then use **Connect AI** and the **Inbox** and **Drain** buttons there. See
+[Option B](#option-b-in-the-app).
 
 ---
 
@@ -67,10 +68,12 @@ knows what Pool is and how the library works. See [Option B](#option-b-from-a-te
 ### What you need
 
 - **A computer running macOS, Windows or Linux.**
-- **[Node.js](https://nodejs.org/en/download) 20 or newer.** It's free. If it's missing, `Start Pool`
-  opens the download page for you. Install it, then double-click `Start Pool` again.
-- **A Chromium-based browser** such as Chrome, Edge, Arc or Brave. Pool writes to its own files
-  through a browser feature that Safari and Firefox don't support yet.
+- **[Node.js](https://nodejs.org/en/download) 20 or newer.** It's free, and it's the only thing a
+  terminal or code editor needs. If it's missing and you use `Start Pool` instead, that opens the
+  download page for you — install it, then double-click `Start Pool` again.
+- **A Chromium-based browser** such as Chrome, Edge, Arc or Brave — only if you'll use the app (the
+  library page itself, or **Option B**). Pool writes to its own files through a browser feature that
+  Safari and Firefox don't support yet. Not needed for **Option A**.
 - **An AI that can see images** (see [Connecting your AI](#connecting-your-ai)). You only need this
   to add references. Browsing works without one.
 
@@ -81,8 +84,12 @@ Either:
 - On GitHub, click **Code → Download ZIP**, then unzip it. **or**
 - In a terminal: `git clone https://github.com/YLynnLee/Pool.git`
 
-Put the folder somewhere it will stay. If you move it later, double-click `Start Pool` once more so
-your computer learns the new location.
+Put the folder somewhere it will stay. If you move it later and you use the app, double-click
+`Start Pool` once more so your computer learns the new location.
+
+**Using a terminal or code editor (Option A)?** That's it for setup — run `npm install` inside the
+folder once, then skip ahead to [Connecting your AI](#connecting-your-ai). The rest of this section
+is only for the point-and-click app.
 
 ### 2. Start Pool for the first time
 
@@ -159,14 +166,15 @@ are **deleted from the folder for good**. See [Good to know](#good-to-know) abou
 ## Connecting your AI
 
 Pool doesn't include an AI. You connect the one you already use, and it does the looking and
-writing. **There are two ways to do it, and they produce the same result.** Choose whichever suits
-you.
+writing. **There are two ways to do it, and they produce the same result.** If you already work in
+a terminal or an AI-enabled code editor, Option A is the more direct path and needs no browser app
+at all; Option B gives you a point-and-click guide instead.
 
-| | **Option A: in the app** | **Option B: from a terminal or code editor** |
+| | **Option A: from a terminal or code editor** | **Option B: in the app** |
 | --- | --- | --- |
-| Best for | Most people | People who already use a coding agent or an AI-enabled code editor |
-| You click / type | **Connect AI**, then follow the guide | `/drain` in your agent or editor chat, or `npm run drain` |
-| Works with | Subscriptions, API keys, local models | Any agent or editor that can run commands and see images |
+| Best for | People who already use a coding agent or an AI-enabled code editor | Anyone who'd rather click through a guide |
+| You click / type | `/drain` in your agent or editor chat, or `npm run drain` | **Connect AI**, then follow the guide |
+| Works with | Any agent or editor that can run commands and see images | Subscriptions, API keys, local models |
 
 ### Which AI can I use?
 
@@ -184,9 +192,57 @@ models can't drain.
 | OpenCode, Pi or Hermes | **OpenCode / Pi / Hermes** | Through that app |
 | Anything else | **Something else** | Any command-line agent, or any OpenAI-compatible server |
 
-### Option A: in the app (easiest)
+### Option A: from a terminal or code editor
 
-1. Click **Connect AI** in the header.
+The direct path — no browser app, no `Start Pool`. Download or clone the repo (see
+[Get the files](#1-get-the-files)), then open **the Pool folder itself** — not a file inside it — as
+the working directory:
+
+- **Terminal:** `cd path/to/Pool` (e.g. `cd ~/Documents/Pool`). On a Mac you can also right-click the
+  folder in Finder and choose **New Terminal at Folder**.
+- **Code editor** (Cursor, VS Code, Windsurf, …): use **File → Open Folder…** and pick the Pool
+  folder, then open its AI chat panel.
+
+```bash
+npm install          # first time only
+```
+
+#### A1. Let your coding agent or editor drain it
+
+Start your agent, or open your editor's chat, **with the Pool folder as the project root**. It reads
+`AGENTS.md` (or `CLAUDE.md` / `GEMINI.md`) and knows what to do — no extra explanation needed.
+
+| Agent / editor | Run it, then type |
+| --- | --- |
+| Claude Code | `claude`, then `/drain` (or `/drain <url>` for one link) |
+| OpenCode | `opencode`, then `/drain` |
+| Gemini CLI | `gemini`, then `/drain` |
+| Codex, Cursor, Pi, or anything that reads `AGENTS.md` | "drain the inbox" |
+| VS Code, Windsurf or another editor's AI chat | Open the chat with the Pool folder as the workspace, then "drain the inbox" |
+| Anything else | paste the contents of [`prompts/drain.md`](prompts/drain.md) |
+
+You watch it work and can approve each step, so this is also the most cautious way to drain (see
+[the one real risk](#the-one-real-risk)).
+
+To extract or refresh the design system for one existing reference: `/extract <id or url>`.
+
+#### A2. Or use the AI you connected in the app
+
+If you've already connected an AI through **Connect AI** ([Option B](#option-b-in-the-app)) — an
+API key or a local model, say — the terminal can reuse that same connection instead of starting an
+agent:
+
+```bash
+npm start                    # start the helper and open the library (same as Start Pool)
+npm run drain                # drain the whole inbox with your connected AI
+npm run drain -- <url>       # drain just one link
+npm run drain -- --test      # check your connected AI answers
+```
+
+### Option B: in the app
+
+1. Double-click **`Start Pool`** if it isn't already running (see [Setting up](#setting-up)), then
+   click **Connect AI** in the header.
    - If you see **"One-time setup: start Pool"**, the helper isn't running yet. Follow the three
      numbered steps: open the Pool folder, double-click `Start Pool`, and come back. The page
      notices when it's ready and continues by itself.
@@ -220,52 +276,6 @@ models can't drain.
 
 From now on the header shows your AI's name with a lit dot. Click it to **Switch AI…** or
 **Disconnect**. Disconnecting never touches your library, inbox or saved keys.
-
-### Option B: from a terminal or code editor
-
-Use this if you already work in a terminal, a coding agent, or a code editor with AI built in — you
-don't need to run `Start Pool` or use the app's UI at all. Download or clone the repo (see
-[Get the files](#1-get-the-files)), then open **the Pool folder itself** — not a file inside it — as
-the working directory:
-
-- **Terminal:** `cd path/to/Pool` (e.g. `cd ~/Documents/Pool`). On a Mac you can also right-click the
-  folder in Finder and choose **New Terminal at Folder**.
-- **Code editor** (Cursor, VS Code, Windsurf, …): use **File → Open Folder…** and pick the Pool
-  folder, then open its AI chat panel.
-
-```bash
-npm install          # first time only
-```
-
-#### B1. Let your coding agent or editor drain it
-
-Start your agent, or open your editor's chat, **with the Pool folder as the project root**. It reads
-`AGENTS.md` (or `CLAUDE.md` / `GEMINI.md`) and knows what to do — no extra explanation needed.
-
-| Agent / editor | Run it, then type |
-| --- | --- |
-| Claude Code | `claude`, then `/drain` (or `/drain <url>` for one link) |
-| OpenCode | `opencode`, then `/drain` |
-| Gemini CLI | `gemini`, then `/drain` |
-| Codex, Cursor, Pi, or anything that reads `AGENTS.md` | "drain the inbox" |
-| VS Code, Windsurf or another editor's AI chat | Open the chat with the Pool folder as the workspace, then "drain the inbox" |
-| Anything else | paste the contents of [`prompts/drain.md`](prompts/drain.md) |
-
-You watch it work and can approve each step, so this is also the most cautious way to drain (see
-[the one real risk](#the-one-real-risk)).
-
-To extract or refresh the design system for one existing reference: `/extract <id or url>`.
-
-#### B2. Use the AI you connected in the app
-
-If you've already connected an AI through **Connect AI**, the terminal uses the same one:
-
-```bash
-npm start                    # start the helper and open the library (same as Start Pool)
-npm run drain                # drain the whole inbox with your connected AI
-npm run drain -- <url>       # drain just one link
-npm run drain -- --test      # check your connected AI answers
-```
 
 ---
 
@@ -332,8 +342,8 @@ stay safe:
 - Only capture sites you'd be comfortable visiting.
 - Prefer an **API key** connection. API drains can only return text, which Pool validates, so the
   model can't run commands.
-- Or drain from a terminal ([Option B1](#b1-let-your-coding-agent-drain-it)) and approve each step
-  yourself.
+- Or drain from a terminal ([Option A1](#a1-let-your-coding-agent-or-editor-drain-it)) and approve
+  each step yourself.
 
 ### Other things worth knowing
 
