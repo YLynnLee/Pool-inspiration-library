@@ -146,9 +146,16 @@ button {
 
 .pill-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   gap: 8px;
   margin-top: 16px;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.pill-row .pill {
+  flex: 0 0 auto;
 }
 
 /* ---- search, with suggestions ---- */
@@ -1412,13 +1419,14 @@ kbd,
 }
 
 .add-modal-cancel {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-dim);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
 }
 
 .add-modal-cancel:hover {
-  color: var(--text);
+  border-color: var(--text-dim);
+  background: var(--bg-raised-2);
 }
 
 .add-modal-save {
@@ -1852,9 +1860,15 @@ kbd,
   cursor: default;
 }
 
-.btn-ghost:not(:disabled):hover {
+.btn-ghost {
+  background: var(--bg-raised);
   border-color: var(--border-strong);
   color: var(--text);
+}
+
+.btn-ghost:not(:disabled):hover {
+  border-color: var(--text-dim);
+  background: var(--bg-raised-2);
 }
 
 .btn-primary {
