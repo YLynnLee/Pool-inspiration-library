@@ -231,11 +231,12 @@
       var stopped = false;
       mount([
         el('h2', { class: 'add-modal-title', text: 'One-time setup: start Pool' }),
-        el('div', { class: 'ai-hint is-prominent' }, [
-          el('p', { text: 'Before Connect AI can reach your computer for the first time, open this folder and double-click “Start Pool” (the .bat file on Windows).' }),
-          el('p', { text: 'Leave that window open. This is a one-time step — after it, Connect AI opens automatically from here on, no more double-clicking.' }),
+        el('p', { class: 'ai-lede', text: 'Before Connect AI can reach your computer, it needs to be started once, by hand. After this, Connect AI opens on its own — no more steps.' }),
+        el('ol', { class: 'ai-steps-list' }, [
+          step(1, 'Open the Pool folder', false, [el('p', { class: 'ai-hint', text: 'The folder this library lives in — where this page’s file is.' })]),
+          step(2, 'Double-click “Start Pool”', false, [el('p', { class: 'ai-hint', text: '(“Start Pool.bat” on Windows.) A window opens and sets things up.' })]),
+          step(3, 'Leave that window open, then come back here', false, [status]),
         ]),
-        status,
         el('div', { class: 'add-modal-actions' }, [el('button', { class: 'add-modal-cancel', type: 'button', text: 'Cancel', onclick: function () { stopped = true; closeModal(); } }), retry]),
       ]);
 
