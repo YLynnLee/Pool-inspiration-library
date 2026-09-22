@@ -1709,6 +1709,23 @@ kbd,
   color: var(--text-faint);
 }
 
+.ai-hint.is-prominent {
+  margin-top: 4px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--bg-raised);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.ai-hint.is-prominent p {
+  margin: 0;
+}
+
+.ai-hint.is-prominent p + p {
+  margin-top: 8px;
+}
+
 .ai-hint a {
   color: var(--accent);
 }
