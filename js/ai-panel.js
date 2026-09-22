@@ -29,6 +29,14 @@
         if (!res.ok) throw new Error(json.error || 'HTTP ' + res.status);
         return json;
       });
+    }, function () {
+      // fetch() itself rejected — the helper isn't answering at all (its
+      // terminal window was closed, the process died, …), as opposed to it
+      // answering with an error. Tagged so callers can offer to restart it
+      // instead of showing the browser's raw "Failed to fetch".
+      var err = new Error('Lost contact with the library helper — is it still running?');
+      err.helperDown = true;
+      throw err;
     });
   }
 
@@ -356,6 +364,15 @@
     var current = function () {};
     mount([view]);
 
+    // The helper stopped answering entirely (its terminal window got closed,
+    // the process died, …) rather than replying with an error. There's
+    // nothing left to click here — go back to the "start Pool" screen so
+    // it can be relaunched, instead of leaving a dead guide on screen.
+    function helperLost() {
+      closeModal();
+      openStartHelper();
+    }
+
     var busy = false;
     // doneStep, when given, is ticked on success and left on screen for a
     // moment before the guide gives way to the "Connected" view.
@@ -376,6 +393,7 @@
           if (current === shown) showConnected(r.message);
         }, 1200);
       }).catch(function (err) {
+        if (err.helperDown) return helperLost();
         setStatus(status, err.message, true);
       }).then(function () {
         busy = false;
@@ -391,6 +409,7 @@
           setStatus(status, r.ok ? r.message : r.message, !r.ok);
           if (r.ok && after) after();
         }, function (err) {
+          if (err.helperDown) return helperLost();
           setStatus(status, err.message, true);
         }).then(function () { button.disabled = false; });
       });
