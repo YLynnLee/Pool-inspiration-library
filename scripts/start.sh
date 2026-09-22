@@ -50,11 +50,27 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 if [ ! -d node_modules/playwright ]; then
-  echo "First run: setting up (about a minute)…"
-  if ! npm install --no-audit --no-fund; then
-    echo "Setup failed — see the messages above."
-    pause
-    exit 1
+  mkdir -p .helper
+  LOCK=".helper/install.lock"
+  if mkdir "$LOCK" 2>/dev/null; then
+    trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
+    echo "First run: setting up (about a minute)…"
+    if ! npm install --no-audit --no-fund; then
+      echo "Setup failed — see the messages above."
+      pause
+      exit 1
+    fi
+  else
+    # Another start already running (e.g. a retried Connect AI click) is
+    # installing — wait for it instead of racing a second npm install in
+    # the same node_modules.
+    echo "Setup already running in another window — waiting for it…"
+    while [ -d "$LOCK" ]; do sleep 1; done
+    if [ ! -d node_modules/playwright ]; then
+      echo "Setup didn't finish — see the other window for errors."
+      pause
+      exit 1
+    fi
   fi
 fi
 
