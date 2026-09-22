@@ -203,10 +203,15 @@
   // already open.
 
   var START_LINK = 'pool://start';
-  // The first start can run `npm install` (~a minute, longer on a slow
-  // connection) before the server answers — give it real room before
-  // calling it failed.
-  var WAIT_MS = 240000;
+  // pool:// only works once "Start Pool" has been double-clicked by hand at
+  // least once (that's what registers the link — see
+  // scripts/register-url-handler.sh). Until then this link resolves to
+  // nothing and the helper will never answer, so there's little point
+  // waiting long or burying the manual step behind a delay: it's shown
+  // up front, every time, as the actual instruction — the automatic
+  // pool:// attempt is the shortcut that skips it once it's set up, not
+  // the primary thing being explained.
+  var WAIT_MS = 60000;
 
   function helperUp() {
     // An opaque no-cors request still tells us whether anything answers.
@@ -221,24 +226,24 @@
     helperUp().then(function (up) {
       if (up) return goToHelper();
 
-      var status = el('p', { class: 'add-modal-status', 'aria-live': 'polite', text: 'Starting Pool…' });
-      var hint = el('p', { class: 'ai-hint', hidden: 'hidden' });
+      var status = el('p', { class: 'add-modal-status', 'aria-live': 'polite', text: 'Trying to connect automatically…' });
       var retry = el('button', { class: 'add-modal-cancel', type: 'button', text: 'Try again', hidden: 'hidden' });
       var stopped = false;
       mount([
-        el('h2', { class: 'add-modal-title', text: 'Connect your AI' }),
-        el('p', { class: 'ai-lede', text: 'Starting the library’s companion app, which talks to your AI. If your browser asks to open “Pool Helper”, choose Open (and tick “Always allow” so it won’t ask again).' }),
+        el('h2', { class: 'add-modal-title', text: 'One-time setup: start Pool' }),
+        el('div', { class: 'ai-hint is-prominent' }, [
+          el('p', { text: 'Before Connect AI can reach your computer for the first time, open this folder and double-click “Start Pool” (the .bat file on Windows).' }),
+          el('p', { text: 'Leave that window open. This is a one-time step — after it, Connect AI opens automatically from here on, no more double-clicking.' }),
+        ]),
         status,
-        hint,
         el('div', { class: 'add-modal-actions' }, [el('button', { class: 'add-modal-cancel', type: 'button', text: 'Cancel', onclick: function () { stopped = true; closeModal(); } }), retry]),
       ]);
 
       function start() {
         stopped = false;
         retry.hidden = true;
-        hint.hidden = true;
         status.classList.remove('is-error');
-        status.textContent = 'Starting Pool…';
+        status.textContent = 'Trying to connect automatically…';
         window.location.href = START_LINK;
         var began = Date.now();
         (function poll() {
@@ -249,12 +254,8 @@
               return goToHelper();
             }
             var waited = Date.now() - began;
-            if (waited > 8000 && hint.hidden) {
-              hint.hidden = false;
-              hint.textContent = 'The very first start sets things up and can take a minute. Nothing happening at all? The first time only, open this folder and double-click “Start Pool” (the .bat file on Windows). After that, this button starts it for you.';
-            }
             if (waited > WAIT_MS) {
-              status.textContent = 'It didn’t start.';
+              status.textContent = 'Still not running — do the step above, then try again.';
               status.classList.add('is-error');
               retry.hidden = false;
               return;
