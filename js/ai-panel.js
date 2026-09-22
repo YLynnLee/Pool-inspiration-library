@@ -203,7 +203,10 @@
   // already open.
 
   var START_LINK = 'pool://start';
-  var WAIT_MS = 90000;
+  // The first start can run `npm install` (~a minute, longer on a slow
+  // connection) before the server answers — give it real room before
+  // calling it failed.
+  var WAIT_MS = 240000;
 
   function helperUp() {
     // An opaque no-cors request still tells us whether anything answers.
