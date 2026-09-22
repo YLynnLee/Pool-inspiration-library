@@ -56,9 +56,15 @@ scratch every time.
 
 Details for each step are below.
 
-**Prefer a point-and-click app instead?** Double-click **`Start Pool`** in the folder
-(`Start Pool.command` on Mac, `Start Pool.bat` on Windows) to open the library in your browser,
-then use **Connect AI** and the **Inbox** and **Drain** buttons there. See
+**Prefer a point-and-click app instead?
+
+
+1. **Download** this repo and unzip it somewhere permanent, such as `Documents/Pool`.
+2. **Double-click `Start Pool`** (`Start Pool.command` on Mac, `Start Pool.bat` on Windows). The
+   first run sets itself up in about a minute, then opens the library in your browser.
+3. Click **Connect AI** (top right), pick the AI you use, and follow its short guide.
+4. Open **Inbox**, paste a link, then press **Drain**.
+See
 [Option B](#option-b-in-the-app).
 
 ---
