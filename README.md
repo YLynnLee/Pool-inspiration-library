@@ -18,7 +18,7 @@ No account, no cloud, no subscription to Pool itself. It's just a folder of file
 - [Using the library](#using-the-library)
 - [Connecting your AI](#connecting-your-ai)
   - [Option A: in the app](#option-a-in-the-app-easiest)
-  - [Option B: from a terminal](#option-b-from-a-terminal)
+  - [Option B: from a terminal or code editor](#option-b-from-a-terminal-or-code-editor)
 - [Draining the inbox](#draining-the-inbox)
 - [Good to know](#good-to-know)
 - [Troubleshooting](#troubleshooting)
@@ -54,6 +54,11 @@ scratch every time.
 4. Open **Inbox**, paste a link, then press **Drain**.
 
 Details for each step are below.
+
+**Prefer not to use the app at all?** Skip steps 2–4: just open the downloaded folder in your
+terminal-based AI or code editor — Claude Code, Cursor, Codex, OpenCode, Gemini CLI, VS Code with a
+Claude/Copilot chat, or anything else that reads `AGENTS.md` — and say "drain the inbox". It already
+knows what Pool is and how the library works. See [Option B](#option-b-from-a-terminal-or-code-editor).
 
 ---
 
@@ -157,11 +162,11 @@ Pool doesn't include an AI. You connect the one you already use, and it does the
 writing. **There are two ways to do it, and they produce the same result.** Choose whichever suits
 you.
 
-| | **Option A: in the app** | **Option B: from a terminal** |
+| | **Option A: in the app** | **Option B: from a terminal or code editor** |
 | --- | --- | --- |
-| Best for | Most people | People who already use a coding agent |
-| You click / type | **Connect AI**, then follow the guide | `/drain` in your agent, or `npm run drain` |
-| Works with | Subscriptions, API keys, local models | Any agent that can run commands and see images |
+| Best for | Most people | People who already use a coding agent or an AI-enabled code editor |
+| You click / type | **Connect AI**, then follow the guide | `/drain` in your agent or editor chat, or `npm run drain` |
+| Works with | Subscriptions, API keys, local models | Any agent or editor that can run commands and see images |
 
 ### Which AI can I use?
 
@@ -216,29 +221,34 @@ models can't drain.
 From now on the header shows your AI's name with a lit dot. Click it to **Switch AI…** or
 **Disconnect**. Disconnecting never touches your library, inbox or saved keys.
 
-### Option B: from a terminal
+### Option B: from a terminal or code editor
 
-Use this if you already work in a terminal or a coding agent. Open the Pool folder in a terminal
-first:
+Use this if you already work in a terminal, a coding agent, or a code editor with AI built in — you
+don't need to run `Start Pool` or use the app's UI at all. Download or clone the repo (see
+[Get the files](#1-get-the-files)), then open **the Pool folder itself** — not a file inside it — as
+the working directory:
+
+- **Terminal:** `cd path/to/Pool` (e.g. `cd ~/Documents/Pool`). On a Mac you can also right-click the
+  folder in Finder and choose **New Terminal at Folder**.
+- **Code editor** (Cursor, VS Code, Windsurf, …): use **File → Open Folder…** and pick the Pool
+  folder, then open its AI chat panel.
 
 ```bash
-cd path/to/Pool      # e.g. cd ~/Documents/Pool
 npm install          # first time only
 ```
 
-(On a Mac you can also right-click the folder in Finder and choose **New Terminal at Folder**.)
+#### B1. Let your coding agent or editor drain it
 
-#### B1. Let your coding agent drain it
+Start your agent, or open your editor's chat, **with the Pool folder as the project root**. It reads
+`AGENTS.md` (or `CLAUDE.md` / `GEMINI.md`) and knows what to do — no extra explanation needed.
 
-Start your agent **inside the Pool folder**. It reads `AGENTS.md` (or `CLAUDE.md` / `GEMINI.md`) and
-knows what to do.
-
-| Agent | Run it, then type |
+| Agent / editor | Run it, then type |
 | --- | --- |
 | Claude Code | `claude`, then `/drain` (or `/drain <url>` for one link) |
 | OpenCode | `opencode`, then `/drain` |
 | Gemini CLI | `gemini`, then `/drain` |
 | Codex, Cursor, Pi, or anything that reads `AGENTS.md` | "drain the inbox" |
+| VS Code, Windsurf or another editor's AI chat | Open the chat with the Pool folder as the workspace, then "drain the inbox" |
 | Anything else | paste the contents of [`prompts/drain.md`](prompts/drain.md) |
 
 You watch it work and can approve each step, so this is also the most cautious way to drain (see
