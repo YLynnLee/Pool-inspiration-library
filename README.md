@@ -2,7 +2,7 @@
 
 [![Test](https://github.com/YLynnLee/Pool/actions/workflows/test.yml/badge.svg)](https://github.com/YLynnLee/Pool/actions/workflows/test.yml)
 
-**A personal library of web and app design references that runs entirely on your computer.**
+**A personal library of web design references that runs entirely on your computer.**
 
 Paste a link to a site whose design you like. Your AI screenshots it, studies it, and files it in
 your library with a written analysis, keywords, a measured design system, and prompts you can reuse.
