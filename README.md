@@ -194,43 +194,39 @@ models can't drain.
 
 ### Option A: from a terminal or code editor
 
-The direct path — no browser app, no `Start Pool`. Download or clone the repo (see
-[Get the files](#1-get-the-files)), then open **the Pool folder itself** — not a file inside it — as
-the working directory:
+The direct path — no browser app, no `Start Pool`.
 
-- **Terminal:** `cd path/to/Pool` (e.g. `cd ~/Documents/Pool`). On a Mac you can also right-click the
-  folder in Finder and choose **New Terminal at Folder**.
-- **Code editor** (Cursor, VS Code, Windsurf, …): use **File → Open Folder…** and pick the Pool
-  folder, then open its AI chat panel.
+1. **Get the files.** Download or clone the repo (see [Get the files](#1-get-the-files)).
+2. **Open the Pool folder itself** — not a file inside it — as your working directory:
+   - **Terminal:** `cd path/to/Pool` (e.g. `cd ~/Documents/Pool`). On a Mac you can also right-click
+     the folder in Finder and choose **New Terminal at Folder**.
+   - **Code editor** (Cursor, VS Code, Windsurf, …): use **File → Open Folder…** and pick the Pool
+     folder, then open its AI chat panel.
+3. **Install dependencies**, first time only:
+   ```bash
+   npm install
+   ```
+4. **Start your agent or editor's chat with the Pool folder as the project root.** It reads
+   `AGENTS.md` (or `CLAUDE.md` / `GEMINI.md`) and knows what to do — no extra explanation needed.
+5. **Drain the inbox.** What you type depends on the agent:
 
-```bash
-npm install          # first time only
-```
-
-#### A1. Let your coding agent or editor drain it
-
-Start your agent, or open your editor's chat, **with the Pool folder as the project root**. It reads
-`AGENTS.md` (or `CLAUDE.md` / `GEMINI.md`) and knows what to do — no extra explanation needed.
-
-| Agent / editor | Run it, then type |
-| --- | --- |
-| Claude Code | `claude`, then `/drain` (or `/drain <url>` for one link) |
-| OpenCode | `opencode`, then `/drain` |
-| Gemini CLI | `gemini`, then `/drain` |
-| Codex, Cursor, Pi, or anything that reads `AGENTS.md` | "drain the inbox" |
-| VS Code, Windsurf or another editor's AI chat | Open the chat with the Pool folder as the workspace, then "drain the inbox" |
-| Anything else | paste the contents of [`prompts/drain.md`](prompts/drain.md) |
+   | Agent / editor | Run it, then type |
+   | --- | --- |
+   | Claude Code | `claude`, then `/drain` (or `/drain <url>` for one link) |
+   | OpenCode | `opencode`, then `/drain` |
+   | Gemini CLI | `gemini`, then `/drain` |
+   | Codex, Cursor, Pi, or anything that reads `AGENTS.md` | "drain the inbox" |
+   | VS Code, Windsurf or another editor's AI chat | Open the chat with the Pool folder as the workspace, then "drain the inbox" |
+   | Anything else | paste the contents of [`prompts/drain.md`](prompts/drain.md) |
 
 You watch it work and can approve each step, so this is also the most cautious way to drain (see
 [the one real risk](#the-one-real-risk)).
 
 To extract or refresh the design system for one existing reference: `/extract <id or url>`.
 
-#### A2. Or use the AI you connected in the app
-
-If you've already connected an AI through **Connect AI** ([Option B](#option-b-in-the-app)) — an
-API key or a local model, say — the terminal can reuse that same connection instead of starting an
-agent:
+**Already connected an AI in the app?** If you've connected one through **Connect AI**
+([Option B](#option-b-in-the-app)) — an API key or a local model, say — skip steps 4–5 above and
+reuse that same connection from the terminal instead:
 
 ```bash
 npm start                    # start the helper and open the library (same as Start Pool)
@@ -342,8 +338,8 @@ stay safe:
 - Only capture sites you'd be comfortable visiting.
 - Prefer an **API key** connection. API drains can only return text, which Pool validates, so the
   model can't run commands.
-- Or drain from a terminal ([Option A1](#a1-let-your-coding-agent-or-editor-drain-it)) and approve
-  each step yourself.
+- Or drain from a terminal ([Option A](#option-a-from-a-terminal-or-code-editor)) and approve each
+  step yourself.
 
 ### Other things worth knowing
 
