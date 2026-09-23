@@ -14,15 +14,15 @@ No account, no cloud, no subscription to Pool itself. It's just a folder of file
 
 - [What you get](#what-you-get)
 - [Quick start](#quick-start)
-- [Setting up](#setting-up)
 - [Using the library](#using-the-library)
 - [Connecting your AI](#connecting-your-ai)
-  - [Option A: from a terminal or code editor](#option-a-from-a-terminal-or-code-editor)
-  - [Option B: in the app](#option-b-in-the-app)
+  - [Which AI can I use?](#which-ai-can-i-use)
+  - [Option A: terminal or code editor](#option-a-terminal-or-code-editor)
+  - [Option B: in-app guide](#option-b-in-app-guide)
 - [Draining the inbox](#draining-the-inbox)
 - [Good to know](#good-to-know)
-- [Troubleshooting](#troubleshooting)
-- [For developers](#for-developers)
+- [More](#more)
+- [License](#license)
 
 ---
 
@@ -47,85 +47,27 @@ scratch every time.
 
 ## Quick start
 
-1. **Download** this repo and unzip it somewhere permanent, such as `Documents/Pool`.
+You'll need [Node.js](https://nodejs.org/en/download) 20 or newer, and an AI that can see images.
+(Browsing needs neither.) Full install details are in [Setting up](docs/setup.md).
+
+1. **Get the files** — download and unzip this repo, or `git clone` it, somewhere permanent such
+   as `Documents/Pool` (see [Get the files](docs/setup.md#1-get-the-files)).
 2. **Open the folder** in your terminal-based AI or code editor — Claude Code, Cursor, Codex,
    OpenCode, Gemini CLI, VS Code with a Claude/Copilot chat, or anything else that reads
    `AGENTS.md`. Run `npm install` the first time.
 3. Add a link to `inbox.md` (or paste it into the library page — see below), then say
    **"drain the inbox"**, or type `/drain` if your agent supports slash commands.
 
-Details for each step are below.
+**Prefer a point-and-click app instead?**
 
-**Prefer a point-and-click app instead?
-
-
-1. **Download** this repo and unzip it somewhere permanent, such as `Documents/Pool`.
+1. **Get the files** — download and unzip this repo, or `git clone` it, somewhere permanent such
+   as `Documents/Pool`.
 2. **Double-click `Start Pool`** (`Start Pool.command` on Mac, `Start Pool.bat` on Windows). The
    first run sets itself up in about a minute, then opens the library in your browser.
 3. Click **Connect AI** (top right), pick the AI you use, and follow its short guide.
 4. Open **Inbox**, paste a link, then press **Drain**.
-See
-[Option B](#option-b-in-the-app).
 
----
-
-## Setting up
-
-### What you need
-
-- **A computer running macOS, Windows or Linux.**
-- **[Node.js](https://nodejs.org/en/download) 20 or newer.** It's free, and it's the only thing a
-  terminal or code editor needs. If it's missing and you use `Start Pool` instead, that opens the
-  download page for you — install it, then double-click `Start Pool` again.
-- **A Chromium-based browser** such as Chrome, Edge, Arc or Brave — only if you'll use the app (the
-  library page itself, or **Option B**). Pool writes to its own files through a browser feature that
-  Safari and Firefox don't support yet. Not needed for **Option A**.
-- **An AI that can see images** (see [Connecting your AI](#connecting-your-ai)). You only need this
-  to add references. Browsing works without one.
-
-### 1. Get the files
-
-Either:
-
-- On GitHub, click **Code → Download ZIP**, then unzip it. **or**
-- In a terminal: `git clone https://github.com/YLynnLee/Pool.git`
-
-Put the folder somewhere it will stay. If you move it later and you use the app, double-click
-`Start Pool` once more so your computer learns the new location.
-
-**Using a terminal or code editor (Option A)?** That's it for setup — run `npm install` inside the
-folder once, then skip ahead to [Connecting your AI](#connecting-your-ai). The rest of this section
-is only for the point-and-click app.
-
-### 2. Start Pool for the first time
-
-Double-click **`Start Pool`** inside the folder.
-
-- **Mac:** the first time, macOS may say it's "from an unidentified developer". Right-click the
-  file and choose **Open**. On newer macOS, go to **System Settings → Privacy & Security** and
-  click **Open Anyway**. You only need to do this once.
-- **Windows:** double-click `Start Pool.bat`. If SmartScreen appears, click **More info → Run
-  anyway**.
-- **Linux:** there's no double-click launcher. Run `sh scripts/start.sh` from the folder.
-
-A small window opens and prints `First run: setting up (about a minute)…`. It installs the one
-dependency Pool needs (Playwright, used to take screenshots). After that your browser opens
-**`http://localhost:4747`**, which is your library.
-
-> **Keep that window open while you use Pool.** It's the local "helper" that lets the page talk to
-> your AI. Closing it only turns off Connect AI and Drain. Browsing still works.
-
-### 3. After the first time
-
-You don't need to double-click `Start Pool` again. The first run registered a `pool://` link on your
-computer, so from then on:
-
-1. Open **`index.html`** in the Pool folder. Bookmarking it is handy.
-2. Click **Connect AI**. The page starts the helper by itself.
-3. Your browser asks once whether to open **"Pool Helper"**. Tick **Always allow** and choose
-   **Open**.
-
-The helper then runs quietly in the background, with no window to keep open.
+See [Option B: in-app guide](#option-b-in-app-guide) and [Setting up](docs/setup.md).
 
 ---
 
@@ -176,7 +118,7 @@ writing. **There are two ways to do it, and they produce the same result.** If y
 a terminal or an AI-enabled code editor, Option A is the more direct path and needs no browser app
 at all; Option B gives you a point-and-click guide instead.
 
-| | **Option A: from a terminal or code editor** | **Option B: in the app** |
+| | **Option A: terminal or code editor** | **Option B: in-app guide** |
 | --- | --- | --- |
 | Best for | People who already use a coding agent or an AI-enabled code editor | Anyone who'd rather click through a guide |
 | You click / type | `/drain` in your agent or editor chat, or `npm run drain` | **Connect AI**, then follow the guide |
@@ -198,11 +140,11 @@ models can't drain.
 | OpenCode, Pi or Hermes | **OpenCode / Pi / Hermes** | Through that app |
 | Anything else | **Something else** | Any command-line agent, or any OpenAI-compatible server |
 
-### Option A: from a terminal or code editor
+### Option A: terminal or code editor
 
 The direct path — no browser app, no `Start Pool`.
 
-1. **Get the files.** Download or clone the repo (see [Get the files](#1-get-the-files)).
+1. **Get the files.** Download or clone the repo (see [Get the files](docs/setup.md#1-get-the-files)).
 2. **Open the Pool folder itself** — not a file inside it — as your working directory:
    - **Terminal:** `cd path/to/Pool` (e.g. `cd ~/Documents/Pool`). On a Mac you can also right-click
      the folder in Finder and choose **New Terminal at Folder**.
@@ -231,7 +173,7 @@ You watch it work and can approve each step, so this is also the most cautious w
 To extract or refresh the design system for one existing reference: `/extract <id or url>`.
 
 **Already connected an AI in the app?** If you've connected one through **Connect AI**
-([Option B](#option-b-in-the-app)) — an API key or a local model, say — skip steps 4–5 above and
+([Option B](#option-b-in-app-guide)) — an API key or a local model, say — skip steps 4–5 above and
 reuse that same connection from the terminal instead:
 
 ```bash
@@ -241,9 +183,9 @@ npm run drain -- <url>       # drain just one link
 npm run drain -- --test      # check your connected AI answers
 ```
 
-### Option B: in the app
+### Option B: in-app guide
 
-1. Double-click **`Start Pool`** if it isn't already running (see [Setting up](#setting-up)), then
+1. Double-click **`Start Pool`** if it isn't already running (see [Setting up](docs/setup.md)), then
    click **Connect AI** in the header.
    - If you see **"One-time setup: start Pool"**, the helper isn't running yet. Follow the three
      numbered steps: open the Pool folder, double-click `Start Pool`, and come back. The page
@@ -344,7 +286,7 @@ stay safe:
 - Only capture sites you'd be comfortable visiting.
 - Prefer an **API key** connection. API drains can only return text, which Pool validates, so the
   model can't run commands.
-- Or drain from a terminal ([Option A](#option-a-from-a-terminal-or-code-editor)) and approve each
+- Or drain from a terminal ([Option A](#option-a-terminal-or-code-editor)) and approve each
   step yourself.
 
 ### Other things worth knowing
@@ -358,104 +300,13 @@ stay safe:
 
 ---
 
-## Troubleshooting
+## More
 
-| Problem | Fix |
-| --- | --- |
-| **"One-time setup: start Pool"** keeps showing | The `pool://` link isn't registered yet. Double-click `Start Pool` once by hand. |
-| Mac says `Start Pool` is from an unidentified developer | Right-click → **Open**, or **System Settings → Privacy & Security → Open Anyway**. |
-| "Pool needs Node.js" | Install Node.js 20+ from [nodejs.org](https://nodejs.org/en/download), then start Pool again. |
-| "Can't reach the library helper" | The helper stopped. Double-click `Start Pool`, or click **Connect AI** to start it in the background. |
-| Adding a link says the browser can't write files | Use Chrome, Edge, Arc or Brave, not Safari or Firefox. |
-| An agent app shows as not installed right after installing | Click **Check again**. If it still isn't found, quit and restart the helper. |
-| Connecting a model fails the image check | That model can't see images. Pick a vision model. |
-| A link shows **Last try failed** | The site couldn't be captured. Drain again later, or remove it from the inbox. |
-| The helper's background log | `.helper/helper.log` in the Pool folder. |
-| Screenshots fail and Chrome isn't installed | Run `npx playwright install chromium` once. |
-
-Still stuck? [Open an issue](https://github.com/YLynnLee/Pool/issues).
-
----
-
-## For developers
-
-### How it's built
-
-- **Static site, no build step, no framework.** Open `index.html` and it runs, even from
-  `file://`. That's why it uses classic `<script>` tags, and no `fetch()` or ES modules in `js/`.
-- **The page never calls a model.** All the intelligence lives in the drain, which is split
-  between three scripts (the mechanics) and your AI (looking at screenshots and writing):
-
-  ```bash
-  node scripts/inbox.js                  # what's waiting, duplicates flagged
-  node scripts/capture.js <url>          # screenshots + design-token harvest (Playwright)
-  node scripts/commit.js result.json     # validate, lint, write to the library in order
-  ```
-
-  The AI writes `result.json` ([format](docs/agents/drain-result.md)) between the last two. The
-  full procedure is [`docs/agents/drain.md`](docs/agents/drain.md). Because of this split, any
-  agent that can run a shell, edit files and see images can drain. No browser tools are needed.
-- **An optional local helper** (`scripts/server.js`) serves the app on `127.0.0.1:4747` and runs
-  drains for the Drain button, with either an agent app or a model API.
-- **Writes are safe to run concurrently.** Saves are atomic and the library is locked during a
-  commit.
-
-### Project structure
-
-```
-├── index.html                 # Entry point
-├── css/style.css              # Styles (see DESIGN.md)
-├── js/
-│   ├── render.js              # Grid, filters, detail page tabs
-│   ├── ai-panel.js            # Connect AI + drain state (talks to the helper)
-│   ├── inbox-panel.js         # Inbox drawer: add links, start and watch drains
-│   ├── curation.js            # Hide, delete, resolve drafts, DESIGN.md serialisation
-│   ├── query.js               # Filtering and search
-│   ├── fs-write.js            # File System Access API writes (for file://)
-│   ├── ui.js                  # Shared UI helpers: popovers, toasts, icons
-│   └── data-access.js         # Data layer
-├── data/
-│   ├── library.js             # All references
-│   ├── categories.js          # Taxonomy with style essays
-│   └── design-systems.js      # Measured design systems, one per reference
-├── images/                    # Reference screenshots (WebP)
-├── fonts/                     # Fraunces + Inter, bundled (SIL OFL)
-├── scripts/
-│   ├── inbox.js / capture.js / commit.js   # The three drain steps
-│   ├── harvest-design.js      # In-page colour/type/spacing/radius harvester
-│   ├── server.js              # Local helper
-│   ├── drain-run.js           # `npm run drain`
-│   ├── start.sh               # What Start Pool runs: setup, register pool://, start helper
-│   ├── register-url-handler.sh# Registers the pool:// link (macOS/Linux)
-│   ├── atomic-write.js, lock.js
-│   └── ai/                    # Provider catalog, config, secrets, agent + API drain modes
-├── docs/agents/               # Agent procedures: drain, extract, result format
-├── prompts/                   # Tool-neutral drain/extract prompts to paste
-├── .claude/ .opencode/ .gemini/   # /drain and /extract commands per agent
-├── AGENTS.md                  # Agent instructions (CLAUDE.md / GEMINI.md import it)
-├── Start Pool.command / .bat  # Double-click launchers
-├── inbox.md                   # Captured links awaiting a drain
-├── CONTEXT.md                 # Glossary of the project's terms
-├── DESIGN.md                  # Pool's own design system
-└── SECURITY.md                # What stays local, what leaves, how keys are stored
-```
-
-### Design
-
-Pool's own interface follows **"The Midnight Gallery"**: a near-black, near-monochrome room
-(obsidian → graphite → steel) where the only accent is white itself, used for whatever you're
-deciding on. Chrome carries no colour, so the colour on screen comes from the references. Titles are
-set in Fraunces italic, body text in Inter, and every label, count and badge in tracked uppercase
-monospace. Draft amber is reserved for parked references. See [DESIGN.md](DESIGN.md).
-
-### Tests
-
-```bash
-npm test
-```
-
-The suite needs no browser. CI runs it on every push and pull request to `main`. See
-[CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR.
+- **[Setting up](docs/setup.md)** — install Pool and start the app for the first time.
+- **[Troubleshooting](docs/troubleshooting.md)** — when something doesn't work.
+- **[For developers](docs/developers.md)** — how Pool is built, and the project structure.
+- **[SECURITY.md](SECURITY.md)** — what stays local, what leaves, and how keys are stored.
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — before opening a PR.
 
 ---
 
