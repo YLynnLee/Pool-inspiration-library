@@ -1,4 +1,4 @@
-# Pool
+# Pool Inspiration Library
 
 [![Test](https://github.com/YLynnLee/Pool/actions/workflows/test.yml/badge.svg)](https://github.com/YLynnLee/Pool/actions/workflows/test.yml)
 
