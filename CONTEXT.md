@@ -85,16 +85,15 @@ failure. It still writes a category assignment through to the library file, but 
 already assigned every draft a category by the time the collector sees it, so resolving fixes
 nothing about the underlying broken screenshot; the control is a known-deferred half-fit.
 
-**Hide** — removing a reference from view immediately and reversibly, recorded only in the
-browser. Not deletion: a hidden reference is still in the library file, untouched. Hidden
-references are listed in the grid's Hidden view, each with Restore and Delete….
-
 **Purge** — deleting a reference for real: its entry in the library file, its design system, and
-its screenshot files. Triggered by the × on a tile and a confirmation; there is no separate purge
-button. Hide survives only for references hidden before this change (↺ restores them).
+its screenshot files, always after a confirmation. Called "Delete" wherever the collector sees it.
+The only way to remove a reference.
 
-**Tombstone** — a single hide record. Retained as the mechanism behind hiding; it is no longer the
-whole deletion story.
+**Hide** — retired. Hiding was a reversible, browser-only removal that purge replaced; the
+collector can no longer hide a reference. References hidden before then still appear in a Hidden
+view, each with Restore and Delete…, until none are left.
+
+**Tombstone** — the record of a legacy hide. Nothing new creates one.
 
 ## Boundaries
 
