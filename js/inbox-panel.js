@@ -6,8 +6,7 @@
 // the procedure behind it.)
 //
 // Writes only ever happen in direct response to the collector (Add, Remove,
-// Drain) — never on load, never on a timer. See
-// CONTRIBUTING.md.
+// Drain) — never on load, never on a timer. See CONTRIBUTING.md.
 (function () {
   'use strict';
 
@@ -229,7 +228,7 @@
   // before adding, so "medium.com" should count as the waiting
   // "https://medium.com/".
   function sameUrl(a, b) {
-    return String(a).replace(/\/+$/, '') === String(b).replace(/\/+$/, '');
+    return window.LinkStatus.key(a) === window.LinkStatus.key(b);
   }
 
   function libraryEntryFor(url) {
@@ -306,13 +305,6 @@
 
   // ---- the list -------------------------------------------------------------------
 
-  function splitUrl(url) {
-    try {
-      return { host: new URL(url).host.replace(/^www\./, '') };
-    } catch (e) {
-      return { host: url };
-    }
-  }
 
   // The helper's own record of a waiting link: its exact line is what Remove needs.
   function inboxItemFor(url) {
@@ -353,7 +345,12 @@
   function retryLink(link, button) {
     var item = inboxItemFor(link.url);
     button.disabled = true;
-    var rewrite = item ? window.removeFromInbox(item.line).then(function () { return window.appendToInbox(link.url, link.note); }) : Promise.resolve();
+    var rewrite = item ? window.removeFromInbox(item.line).then(function () {
+      // If the clean line can't be written, put the original back rather than lose the link.
+      return window.appendToInbox(link.url, link.note).catch(function (err) {
+        return window.appendToInbox(item.url, item.note).then(function () { throw err; });
+      });
+    }) : Promise.resolve();
     rewrite.then(function () {
       if (retried.indexOf(link.url) === -1) retried.push(link.url);
       remember(link.url, link.note);
@@ -577,7 +574,7 @@
     if (drain.total) {
       live.bar.classList.remove('is-indeterminate');
       live.bar.firstChild.style.width = Math.max(4, ((drain.step - 0.5) / drain.total) * 100) + '%';
-      live.title.textContent = 'Analysing ' + splitUrl(drain.currentUrl).host + ' · ' + drain.step + ' of ' + drain.total;
+      live.title.textContent = 'Analysing ' + window.LinkStatus.hostOf(drain.currentUrl) + ' · ' + drain.step + ' of ' + drain.total;
     } else {
       live.bar.classList.add('is-indeterminate');
       live.bar.firstChild.style.width = '';
@@ -597,6 +594,8 @@
     var status = AI.status();
     // Rebuild the list only when what it shows changed — not on every log line.
     syncKnown(status);
+    // A new run reports its own failures; the old Retry no longer applies.
+    if (AI.drain.running && retried.length) retried = [];
     var key = JSON.stringify([
       status && status.inbox ? status.inbox.items : null,
       AI.drain.running,
