@@ -230,6 +230,91 @@
       });
     }
 
+    // Picks the model this AI drains with. An agent app gets "its own
+    // default" plus its models (or a typed name); an API gets its model
+    // list. Saving re-runs the connection test, so a model that can't
+    // answer never replaces one that can.
+    function showModel() {
+      body.textContent = '';
+      var config = cached.config;
+      var agentMode = config.mode === 'agent';
+      var current = agentMode ? config.agent.model || '' : config.api.model;
+      var OTHER = '\u0000other';
+      var status = el('p', { class: 'ai-menu-note', 'aria-live': 'polite', text: 'Loading models…' });
+      var select = el('select', { class: 'add-modal-input', 'aria-label': 'Model', hidden: 'hidden' });
+      var typed = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Model name', placeholder: 'Model name', hidden: 'hidden' });
+      var save = el('button', { class: 'btn btn-primary btn-sm', type: 'button', text: 'Use this model', disabled: true });
+      body.appendChild(el('p', { class: 'popover-eyebrow', text: 'Model' }));
+      body.appendChild(el('p', { class: 'ai-menu-meta', text: 'Which model ' + connection.label.split(' · ')[0] + ' drains with.' }));
+      body.appendChild(el('div', { class: 'ai-model-pick' }, [select, typed]));
+      body.appendChild(status);
+      body.appendChild(el('div', { class: 'ai-menu-actions' }, [
+        el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Back', onclick: showMain }),
+        save,
+      ]));
+
+      function chosen() {
+        return select.hidden || select.value === OTHER ? typed.value.trim() : select.value;
+      }
+
+      select.addEventListener('change', function () {
+        typed.hidden = select.value !== OTHER;
+        if (!typed.hidden) typed.focus();
+      });
+
+      api('POST', '/api/models', { mode: config.mode }).then(function (r) {
+        var options = r.models.map(function (m) {
+          return typeof m === 'string' ? { id: m, label: m } : m;
+        });
+        var free = agentMode ? r.free : true;
+        if (agentMode) options.unshift({ id: '', label: 'Its own default' });
+        var known = options.some(function (o) { return o.id === current; });
+        if (!known && current) options.push({ id: current, label: current });
+        if (free) options.push({ id: OTHER, label: 'Other…' });
+        options.forEach(function (o) {
+          select.appendChild(el('option', { value: o.id, text: o.label }));
+        });
+        select.value = current;
+        select.hidden = false;
+        status.textContent = agentMode && !r.models.length && free ? 'Pick “Other…” to type a model name this app accepts.' : '';
+        save.disabled = false;
+        select.focus();
+      }, function (err) {
+        // No list to pick from (the key or server can't list models): a
+        // typed name still works.
+        typed.hidden = false;
+        typed.value = current;
+        status.textContent = err.message + ' — type a model name instead.';
+        save.disabled = false;
+      });
+
+      save.addEventListener('click', function () {
+        var model = chosen();
+        if (!agentMode && !model) {
+          status.textContent = 'Choose a model.';
+          status.classList.add('is-error');
+          return;
+        }
+        save.disabled = true;
+        status.classList.remove('is-error');
+        status.textContent = agentMode ? 'Checking it answers — this can take up to a minute…' : 'Checking it can see images…';
+        var update = { ai: connection.ai, mode: config.mode };
+        if (agentMode) update.agent = { model: model };
+        else update.api = { model: model };
+        api('POST', '/api/connect', update).then(function (r) {
+          cached = r.status;
+          notify();
+          if (!r.ok) throw new Error(r.message);
+          window.UI.closePopover();
+          window.UI.toast(r.message);
+        }).catch(function (err) {
+          status.textContent = err.message + (err.helperDown ? '' : ' Still using the previous model.');
+          status.classList.add('is-error');
+          save.disabled = false;
+        });
+      });
+    }
+
     function showConfirm() {
       body.textContent = '';
       var status = el('div', { class: 'notice-slot' });
