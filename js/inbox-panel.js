@@ -113,7 +113,7 @@
 
   // ---- drawer -------------------------------------------------------------------
 
-  var drawer = null; // { overlay, input, note, feedback, list, footer, footerKind, returnFocus }
+  var drawer = null; // { overlay, input, note, setNoteOpen, feedback, list, footer, footerKind, returnFocus }
 
   function isOpen() {
     return !!(drawer && document.body.contains(drawer.overlay));
@@ -160,24 +160,34 @@
       type: 'text',
       placeholder: 'What caught your eye? (optional)',
       'aria-label': 'Note',
-      hidden: true,
     });
+    // Grid-rows wrapper so the field can animate open and shut; `inert` keeps it
+    // out of the tab order while collapsed.
+    var noteWrap = el('div', { class: 'inbox-note-wrap' }, [el('div', { class: 'inbox-note-inner' }, [note])]);
     var noteToggle = el('button', {
       class: 'link-btn',
       type: 'button',
-      text: '+ Add a note',
+      'aria-expanded': 'false',
       onclick: function () {
-        note.hidden = false;
-        noteToggle.hidden = true;
-        note.focus();
+        var open = noteWrap.classList.contains('is-open');
+        setNoteOpen(!open);
+        if (!open) note.focus();
       },
     });
+    // Collapsing only hides the field; whatever was typed stays and is still saved.
+    function setNoteOpen(open) {
+      noteWrap.classList.toggle('is-open', open);
+      noteWrap.inert = !open;
+      noteToggle.textContent = open ? '− Hide note' : '+ Add a note';
+      noteToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    setNoteOpen(false);
     var addBtn = el('button', { class: 'btn btn-primary', type: 'submit', text: 'Add' });
     var feedback = el('div', { class: 'notice-slot' });
     var form = el('form', { class: 'inbox-add', novalidate: true }, [
       el('div', { class: 'inbox-add-row' }, [input, addBtn]),
-      note,
       el('div', { class: 'inbox-add-meta' }, [noteToggle]),
+      noteWrap,
       feedback,
     ]);
     form.addEventListener('submit', function (evt) {
@@ -211,6 +221,7 @@
       input: input,
       note: note,
       noteToggle: noteToggle,
+      setNoteOpen: setNoteOpen,
       addBtn: addBtn,
       feedback: feedback,
       list: list,
@@ -298,8 +309,7 @@
         setFeedback(added ? 'success' : 'warning', parts[0] || 'Nothing added', parts.slice(1).join(' '));
         d.input.value = '';
         d.note.value = '';
-        d.note.hidden = true;
-        d.noteToggle.hidden = false;
+        d.setNoteOpen(false);
         d.input.focus();
       })
       .catch(function (err) {
