@@ -426,28 +426,24 @@
     var waiting = count('waiting');
     var footer = el('div', { class: 'proto-footer' });
     if (!state.connected) {
-      footer.appendChild(notice('info', 'Connect an AI to analyse these', 'Use Connect AI at the top of the page. Links stay saved here until then.'));
+      footer.appendChild(notice('info', 'Connect an AI to analyse these', 'Use Connect AI at the top of the page.'));
       footer.appendChild(el('button', { class: 'btn btn-primary btn-block', type: 'button', disabled: true, text: 'Analyse ' + UI.plural(waiting, 'link') }));
       return footer;
     }
     if (state.running) {
-      footer.appendChild(el('div', { class: 'proto-link-row' }, [
-        el('p', { class: 'proto-footer-meta', text: 'You can close this — it keeps going, and the button at the top shows progress.' }),
-        el('button', { class: 'btn btn-ghost btn-sm', type: 'button', onclick: stopRun }, [icon('stop'), 'Stop']),
-      ]));
+      footer.appendChild(el('button', { class: 'btn btn-ghost btn-block', type: 'button', onclick: stopRun }, [icon('stop'), 'Stop']));
       return footer;
     }
     if (state.finished) {
       var added = count('added');
       var failed = count('failed');
       footer.appendChild(failed
-        ? notice('warning', added + ' added · ' + failed + ' failed', 'Each failed link above says what went wrong and how to fix it.')
+        ? notice('warning', added + ' added · ' + failed + ' failed', null)
         : notice('success', added + ' added to your library', null));
     }
     if (waiting) {
       footer.appendChild(buildModelPicker());
       footer.appendChild(el('button', { class: 'btn btn-primary btn-block', type: 'button', disabled: !!state.checking, text: 'Analyse ' + UI.plural(waiting, 'link'), onclick: startRun }));
-      footer.appendChild(el('p', { class: 'proto-footer-meta', text: 'A few minutes each · uses your plan or credit. You can stop any time; finished ones stay.' }));
     }
     return footer.childNodes.length ? footer : null;
   }
@@ -480,24 +476,18 @@
     var form = el('form', { class: 'proto-add-form', onsubmit: add }, [
       el('div', { class: 'proto-add-row' }, [input, el('button', { class: 'btn btn-primary', type: 'submit', text: 'Add' })]),
       note,
-      el('div', { class: 'proto-add-meta' }, [
-        noteToggle,
-        el('p', { class: 'proto-add-hint', text: 'Or paste a link anywhere on the library page.' }),
-      ]),
+      el('div', { class: 'proto-add-meta' }, [noteToggle]),
       feedback,
     ]);
 
     var lists = { A: listA, B: listB, C: listC };
     var body = el('div', { class: 'proto-drawer-body' }, [
-      state.links.length ? lists[param('add')]() : el('p', { class: 'proto-add-hint', text: 'Nothing waiting. Links you add show up here while they’re analysed.' }),
+      state.links.length ? lists[param('add')]() : el('p', { class: 'proto-add-hint', text: 'Nothing added yet.' }),
     ]);
 
     var drawer = el('aside', { class: 'drawer', role: 'dialog', 'aria-label': 'Add references' }, [
       el('div', { class: 'drawer-header' }, [
-        el('div', {}, [
-          el('h2', { class: 'drawer-title', text: 'Add references' }),
-          el('p', { class: 'drawer-sub', text: 'Paste a link, then analyse it. Each one becomes a reference in your library.' }),
-        ]),
+        el('h2', { class: 'drawer-title', text: 'Add references' }),
         el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: closeDrawer }, [icon('close')]),
       ]),
       form,
