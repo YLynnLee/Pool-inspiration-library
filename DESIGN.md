@@ -269,6 +269,18 @@ chrome.
   Analyse action or its live progress pinned at the bottom.
 - The link being analysed shows the Analysing status; a thin 4px white bar shows progress.
 
+### Reference page
+- Order: "Library" back link, draft notice (warning, with **Resolve…**) if a draft, screenshots,
+  caption block, Summary, Keywords, then the tabs.
+- **Caption block:** the title in the display serif italic, the category name and its one-line
+  definition as a single dim caption line beneath it; **Visit site** (secondary, small, external
+  icon) and **Delete…** (quiet danger, small) on the right, stacking under the text at phone width.
+- Summary and Keywords sit under the same mono section labels, 15px body and 66ch measure as
+  Breakdown. Keywords are plain text separated by middots (the separator trails each item, so no
+  line starts with one). Nothing here is a link except the two actions.
+- Breakdown opens with **Character**, a 1–3 sentence description of the style; measurement notes
+  live in a collapsed "How this was measured" section at the end.
+
 ### Search and filter tokens
 - The search field carries a leading search icon and a `/` key hint; typing opens a suggestions
   list (graphite, floating-surface shadow) of matching categories and keywords, its section label
@@ -289,7 +301,7 @@ chrome.
   inactive hover only shifts the border to hairline-strong and brightens text — never introduces
   color on hover, only on true selection.
 - **Static chip variant** (category vocabulary chips) suppresses hover entirely — it is
-  informational, not actionable.
+  informational, not actionable. Reference-page keywords are not chips; they are plain text.
 
 ### Cards / Tiles
 - **Corner style:** 16px radius, overflow hidden so the cover image clips to the same radius.
