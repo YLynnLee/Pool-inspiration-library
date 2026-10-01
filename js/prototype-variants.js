@@ -205,7 +205,7 @@
     connected: true,
     running: false,
     ai: 'claude',
-    model: '',
+    model: 'opus',
     checking: '',
     menuOpen: false,
     expanded: false,
@@ -387,7 +387,7 @@
   // quick (list, save, re-test); changing the AI is the full Connect flow,
   // so it is its own labelled action, "Switch AI…", never a dropdown entry.
   var AIS = [
-    { id: 'claude', label: 'Claude Code', models: [['', 'Its own default'], ['opus', 'Opus 5.5'], ['sonnet', 'Sonnet 5.5'], ['haiku', 'Haiku 4.5']] },
+    { id: 'claude', label: 'Claude Code', models: [['opus', 'Opus 5.5'], ['sonnet', 'Sonnet 5.5'], ['haiku', 'Haiku 4.5']] },
   ];
 
   function aiById(id) {
@@ -459,6 +459,7 @@
     }, [
       aiDot(),
       el('span', { class: 'proto-engine-name', text: ai.label }),
+      el('span', { class: 'proto-engine-sep', 'aria-hidden': 'true', text: '·' }),
       el('span', { class: 'proto-engine-model', text: modelLabel(state.model) }),
       icon('chevron'),
     ]);

@@ -540,8 +540,9 @@ a.btn { text-decoration: none; }
 .proto-menu {
   position: absolute;
   left: 0;
-  right: 0;
   bottom: calc(100% + 8px);
+  width: 280px;
+  max-width: calc(100vw - 48px);
   padding: 10px;
   display: grid;
   gap: 2px;
@@ -605,30 +606,30 @@ a.btn { text-decoration: none; }
 
 .proto-engine-open .link-btn { justify-self: start; }
 
-/* the one-line AI + model trigger */
+/* the one-line AI + model trigger: inline text, not a form field */
+
+.proto-split { justify-self: start; }
 
 .proto-engine-trigger {
-  width: 100%;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 11px 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 9px;
-  background: var(--bg-raised-2);
+  gap: 8px;
+  max-width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: none;
   color: var(--text);
   font-size: 13.5px;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
 }
 
-.proto-engine-trigger:not(:disabled):hover { border-color: var(--text-dim); }
 .proto-engine-trigger:disabled { opacity: 0.6; cursor: default; }
 
 .proto-engine-trigger .status-dot { color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); flex-shrink: 0; }
 
 .proto-engine-name { font-weight: 500; white-space: nowrap; }
+.proto-engine-sep { color: var(--text-faint); }
 
 .proto-engine-model {
   color: var(--text-dim);
@@ -636,9 +637,14 @@ a.btn { text-decoration: none; }
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+  transition: color 0.15s var(--ease);
 }
 
-.proto-engine-trigger .icon { margin-left: auto; color: var(--text-dim); transition: transform 0.15s var(--ease); }
+.proto-engine-trigger:not(:disabled):hover .proto-engine-model,
+.proto-engine-trigger[aria-expanded='true'] .proto-engine-model { color: var(--text); }
+
+.proto-engine-trigger .icon { color: var(--text-dim); transition: transform 0.15s var(--ease), color 0.15s var(--ease); }
+.proto-engine-trigger:not(:disabled):hover .icon { color: var(--text); }
 .proto-engine-trigger[aria-expanded='true'] .icon { transform: rotate(180deg); }
 
 .proto-menu-head .section-label { margin: 0; }
