@@ -457,11 +457,8 @@
       disabled: !!state.checking,
       onclick: function () { state.menuOpen = !state.menuOpen; render(); },
     }, [
-      aiDot(),
-      el('span', { class: 'proto-engine-name', text: ai.label }),
-      el('span', { class: 'proto-engine-sep', 'aria-hidden': 'true', text: '·' }),
-      el('span', { class: 'proto-engine-model', text: modelLabel(state.model) }),
-      icon('chevron'),
+      el('span', { class: 'proto-engine-side' }, [aiDot(), el('span', { class: 'proto-engine-name', text: ai.label })]),
+      el('span', { class: 'proto-engine-side' }, [el('span', { class: 'proto-engine-model', text: modelLabel(state.model) }), icon('chevron')]),
     ]);
     var menu = state.menuOpen
       ? el('div', { class: 'proto-menu', role: 'menu' }, [

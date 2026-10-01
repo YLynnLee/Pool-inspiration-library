@@ -540,9 +540,8 @@ a.btn { text-decoration: none; }
 .proto-menu {
   position: absolute;
   left: 0;
+  right: 0;
   bottom: calc(100% + 8px);
-  width: 280px;
-  max-width: calc(100vw - 48px);
   padding: 10px;
   display: grid;
   gap: 2px;
@@ -608,13 +607,14 @@ a.btn { text-decoration: none; }
 
 /* the one-line AI + model trigger: inline text, not a form field */
 
-.proto-split { justify-self: start; }
+.proto-split { justify-self: stretch; }
 
 .proto-engine-trigger {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  max-width: 100%;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
   padding: 4px 0;
   border: 0;
   background: none;
@@ -629,7 +629,7 @@ a.btn { text-decoration: none; }
 .proto-engine-trigger .status-dot { color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); flex-shrink: 0; }
 
 .proto-engine-name { font-weight: 500; white-space: nowrap; }
-.proto-engine-sep { color: var(--text-faint); }
+.proto-engine-side { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 
 .proto-engine-model {
   color: var(--text-dim);
