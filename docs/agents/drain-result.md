@@ -54,7 +54,8 @@ without `--dry-run`.
   "designSystem": {
     "referenceId": "example",         // equals reference.id
     "name": "Example",
-    "description": "What was measured from harvest.json and what was inferred from the frames.",
+    "description": "One to three sentences about the style itself — its Character, nothing about process.",
+    "measurementNotes": "What was measured from harvest.json and what was inferred from the frames.",
     "colors": {
       "surface": { "value": "#000000", "displayName": "Void Black", "role": "the ground" }
     },
