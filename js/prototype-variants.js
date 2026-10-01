@@ -16,6 +16,7 @@
   var VARIANTS = {
     detail: { A: 'Header first · label column', B: 'Split · sticky screenshot', C: 'Plate · caption under screenshot' },
     add: { A: 'One list · status per row', B: 'Grouped by state', C: 'Progress track per link' },
+    engine: { A: 'Stacked · model select', B: 'Split button · menu', C: 'Summary line · expand' },
   };
 
   function param(key) {
@@ -206,6 +207,8 @@
     ai: 'claude',
     model: '',
     checking: '',
+    menuOpen: false,
+    expanded: false,
     links: [
       { url: 'https://linear.app/method', note: 'the tight type scale', status: 'added', ref: 'Linear — Method' },
       { url: 'https://www.figma.com/blocked-example/', note: '', status: 'failed', reason: 'The site blocked the screenshot', fix: 'Retry — it often works on a second try. If it keeps failing, remove it and capture it by hand.' },
@@ -380,60 +383,146 @@
     }));
   }
 
-  // Who analyses, and with which model. Both are chosen right above the
-  // Analyse button. Picking another AI resets the model to that AI's default;
-  // either change re-runs the connection test (stubbed as a short delay), so
-  // a choice that can't answer never replaces one that can.
+  // One AI is connected at a time. Choosing a model stays inside it and is
+  // quick (list, save, re-test); changing the AI is the full Connect flow,
+  // so it is its own labelled action, "Switch AI…", never a dropdown entry.
   var AIS = [
     { id: 'claude', label: 'Claude Code', models: [['', 'Its own default'], ['opus', 'Opus 5.5'], ['sonnet', 'Sonnet 5.5'], ['haiku', 'Haiku 4.5']] },
-    { id: 'codex', label: 'Codex', models: [['', 'Its own default'], ['gpt-5', 'GPT-5'], ['gpt-5-mini', 'GPT-5 mini']] },
-    { id: 'ollama', label: 'Ollama · this computer', models: [['qwen2.5vl', 'Qwen2.5-VL 7B'], ['llama3.2-vision', 'Llama 3.2 Vision']] },
   ];
-  var ADD_AI = '__add__';
 
   function aiById(id) {
     return AIS.filter(function (a) { return a.id === id; })[0] || AIS[0];
   }
 
-  function modelLabel(ai, id) {
-    var m = aiById(ai).models.filter(function (x) { return x[0] === id; })[0];
+  function modelLabel(id) {
+    var m = aiById(state.ai).models.filter(function (x) { return x[0] === id; })[0];
     return m ? m[1] : id;
   }
 
-  function commitChoice(ai, model) {
-    state.checking = modelLabel(ai, model) + ' on ' + aiById(ai).label;
+  function commitModel(model) {
+    state.checking = modelLabel(model);
+    state.menuOpen = false;
     render();
     window.setTimeout(function () {
       state.checking = '';
-      state.ai = ai;
       state.model = model;
       render();
-      UI.toast('Analysing with ' + aiById(ai).label + ' · ' + modelLabel(ai, model) + '.');
+      UI.toast('Analysing with ' + modelLabel(model) + '.');
     }, 1400);
   }
 
-  function selectField(name, label, options, value, onChange) {
-    var select = el('select', { class: 'field proto-select', 'aria-label': label, disabled: !!state.checking },
-      options.map(function (o) { return el('option', { value: o[0], text: o[1] }); }));
-    select.value = value;
-    select.addEventListener('change', function () { onChange(select.value); });
-    return el('label', { class: 'proto-pick' }, [el('span', { class: 'section-label', text: name }), select]);
+  function switchAi() {
+    stubToast('opens Switch AI — connecting another replaces ' + aiById(state.ai).label);
   }
 
-  function buildModelPicker() {
-    var ai = aiById(state.ai);
-    var aiOptions = AIS.map(function (a) { return [a.id, a.label]; }).concat([[ADD_AI, 'Connect another AI…']]);
-    return el('div', { class: 'proto-engine' }, [
-      selectField('AI', 'AI', aiOptions, ai.id, function (id) {
-        if (id === ADD_AI) { stubToast('opens Connect AI'); render(); return; }
-        commitChoice(id, aiById(id).models[0][0]);
-      }),
-      selectField('Model', 'Model', ai.models, state.model, function (id) { commitChoice(ai.id, id); }),
-      state.checking
-        ? el('p', { class: 'proto-footer-meta', 'aria-live': 'polite' }, [el('span', { class: 'spinner', 'aria-hidden': 'true' }), 'Checking ' + state.checking + ' answers…'])
-        : null,
-    ]);
+  function aiDot() {
+    return el('span', { class: 'status-dot', 'aria-hidden': 'true' });
   }
+
+  function checkingLine() {
+    return state.checking
+      ? el('p', { class: 'proto-footer-meta', 'aria-live': 'polite' }, [el('span', { class: 'spinner', 'aria-hidden': 'true' }), 'Checking ' + state.checking + ' answers…'])
+      : null;
+  }
+
+  function analyseBtn(waiting) {
+    return el('button', {
+      class: 'btn btn-primary btn-block',
+      type: 'button',
+      disabled: !!state.checking,
+      text: 'Analyse ' + UI.plural(waiting, 'link'),
+      onclick: startRun,
+    });
+  }
+
+  function modelSelect() {
+    var select = el('select', { class: 'field proto-select', 'aria-label': 'Model', disabled: !!state.checking },
+      aiById(state.ai).models.map(function (o) { return el('option', { value: o[0], text: o[1] }); }));
+    select.value = state.model;
+    select.addEventListener('change', function () { commitModel(select.value); });
+    return select;
+  }
+
+  var ENGINE = {
+    // A — stacked: who, then which model, then go.
+    A: function (waiting) {
+      return [
+        el('div', { class: 'proto-engine' }, [
+          el('div', { class: 'proto-engine-head' }, [
+            el('span', { class: 'section-label', text: 'Analyse with' }),
+            el('button', { class: 'link-btn', type: 'button', text: 'Switch AI…', onclick: switchAi }),
+          ]),
+          el('p', { class: 'proto-engine-ai' }, [aiDot(), aiById(state.ai).label]),
+          el('label', { class: 'proto-pick' }, [el('span', { class: 'section-label', text: 'Model' }), modelSelect()]),
+          checkingLine(),
+        ]),
+        analyseBtn(waiting),
+      ];
+    },
+
+    // B — split button: the primary action carries a chevron that opens the
+    // choice. Nothing extra is on screen until you want to change it.
+    B: function (waiting) {
+      var ai = aiById(state.ai);
+      var toggle = el('button', {
+        class: 'btn btn-primary proto-split-toggle',
+        type: 'button',
+        'aria-label': 'Change AI or model',
+        'aria-haspopup': 'menu',
+        'aria-expanded': state.menuOpen ? 'true' : 'false',
+        disabled: !!state.checking,
+        onclick: function () { state.menuOpen = !state.menuOpen; render(); },
+      }, [icon('chevron')]);
+      var menu = state.menuOpen
+        ? el('div', { class: 'proto-menu', role: 'menu' }, [
+          el('div', { class: 'proto-menu-head' }, [
+            el('span', { class: 'proto-engine-ai' }, [aiDot(), ai.label]),
+            el('button', { class: 'link-btn', type: 'button', text: 'Switch AI…', onclick: function () { state.menuOpen = false; render(); switchAi(); } }),
+          ]),
+          el('p', { class: 'section-label', text: 'Model' }),
+        ].concat(ai.models.map(function (m) {
+          var on = m[0] === state.model;
+          return el('button', { class: 'proto-menu-item' + (on ? ' is-on' : ''), type: 'button', role: 'menuitemradio', 'aria-checked': on ? 'true' : 'false', onclick: function () { if (!on) commitModel(m[0]); else { state.menuOpen = false; render(); } } }, [
+            el('span', { text: m[1] }),
+            on ? icon('check') : null,
+          ]);
+        })))
+        : null;
+      return [
+        el('div', { class: 'proto-split' }, [
+          menu,
+          el('div', { class: 'proto-split-row' }, [
+            el('button', { class: 'btn btn-primary proto-split-main', type: 'button', disabled: !!state.checking, text: 'Analyse ' + UI.plural(waiting, 'link'), onclick: startRun }),
+            toggle,
+          ]),
+        ]),
+        el('p', { class: 'proto-engine-ai proto-engine-sub' }, [aiDot(), ai.label + ' · ' + modelLabel(state.model)]),
+        checkingLine(),
+      ];
+    },
+
+    // C — one summary line; "Change" opens the choice inline above the button.
+    C: function (waiting) {
+      var ai = aiById(state.ai);
+      var open = !!state.expanded;
+      return [
+        el('div', { class: 'proto-engine' }, [
+          el('div', { class: 'proto-summary' }, [
+            el('p', { class: 'proto-engine-ai' }, [aiDot(), ai.label + ' · ' + modelLabel(state.model)]),
+            el('button', { class: 'link-btn proto-change', type: 'button', 'aria-expanded': open ? 'true' : 'false', disabled: !!state.checking, onclick: function () { state.expanded = !open; render(); } }, [open ? 'Done' : 'Change', icon('chevron')]),
+          ]),
+          open
+            ? el('div', { class: 'proto-engine-open' }, [
+              el('label', { class: 'proto-pick' }, [el('span', { class: 'section-label', text: 'Model' }), modelSelect()]),
+              el('button', { class: 'link-btn', type: 'button', text: 'Switch AI…', onclick: switchAi }),
+            ])
+            : null,
+          checkingLine(),
+        ]),
+        analyseBtn(waiting),
+      ];
+    },
+  };
 
   function buildFooter() {
     var waiting = count('waiting');
@@ -455,8 +544,7 @@
         : notice('success', added + ' added to your library', null));
     }
     if (waiting) {
-      footer.appendChild(buildModelPicker());
-      footer.appendChild(el('button', { class: 'btn btn-primary btn-block', type: 'button', disabled: !!state.checking, text: 'Analyse ' + UI.plural(waiting, 'link'), onclick: startRun }));
+      ENGINE[param('engine')](waiting).forEach(function (node) { if (node) footer.appendChild(node); });
     }
     return footer.childNodes.length ? footer : null;
   }
@@ -495,7 +583,7 @@
 
     var lists = { A: listA, B: listB, C: listC };
     var body = el('div', { class: 'proto-drawer-body' }, [
-      state.links.length ? lists[param('add')]() : el('p', { class: 'proto-add-hint', text: 'Nothing added yet.' }),
+      state.links.length ? lists.A() : el('p', { class: 'proto-add-hint', text: 'Nothing added yet.' }),
     ]);
 
     var drawer = el('aside', { class: 'drawer', role: 'dialog', 'aria-label': 'Add references' }, [
@@ -527,7 +615,11 @@
   }
 
   document.addEventListener('keydown', function (evt) {
+    if (evt.key === 'Escape' && state.menuOpen) { state.menuOpen = false; render(); return; }
     if (evt.key === 'Escape' && drawerNode) closeDrawer();
+  });
+  document.addEventListener('mousedown', function (evt) {
+    if (state.menuOpen && drawerNode && !evt.target.closest('.proto-split')) { state.menuOpen = false; render(); }
   });
 
   function renderDrawerInPlace() {
@@ -618,7 +710,7 @@
   function renderBar() {
     if (bar) bar.remove();
     var onEntry = !!document.querySelector('.view-entry');
-    var key = onEntry ? 'detail' : 'add';
+    var key = onEntry ? 'detail' : 'engine';
     var keys = Object.keys(VARIANTS[key]);
     var cur = param(key);
     function step(dir) {
@@ -626,7 +718,7 @@
     }
     var children = [
       el('button', { type: 'button', 'aria-label': 'Previous variant', text: '←', onclick: function () { step(-1); } }),
-      el('span', { class: 'proto-bar-label', text: (onEntry ? 'Reference page ' : 'Add drawer ') + cur + ' — ' + VARIANTS[key][cur] }),
+      el('span', { class: 'proto-bar-label', text: (onEntry ? 'Reference page ' : 'Analyse section ') + cur + ' — ' + VARIANTS[key][cur] }),
       el('button', { type: 'button', 'aria-label': 'Next variant', text: '→', onclick: function () { step(1); } }),
     ];
     if (!onEntry) {
