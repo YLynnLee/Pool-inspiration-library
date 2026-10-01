@@ -49,3 +49,17 @@ to the OS secret store, not this file — `scripts/ai/secrets.js`), and `node sc
 
 Every drain is started by hand — from `/drain`, the app's Drain button, or `node scripts/drain-run.js`.
 There is no scheduled or unattended mode.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as local markdown files under `.scratch/<feature>/` (gitignored, never published). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The default five roles, each label equal to its name (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
