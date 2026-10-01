@@ -203,9 +203,9 @@
   var state = {
     connected: true,
     running: false,
+    ai: 'claude',
     model: '',
-    pending: null,
-    checking: false,
+    checking: '',
     links: [
       { url: 'https://linear.app/method', note: 'the tight type scale', status: 'added', ref: 'Linear — Method' },
       { url: 'https://www.figma.com/blocked-example/', note: '', status: 'failed', reason: 'The site blocked the screenshot', fix: 'Retry — it often works on a second try. If it keeps failing, remove it and capture it by hand.' },
@@ -242,7 +242,7 @@
         stubToast(state.connected ? 'connected Claude Code' : 'disconnected');
         render();
       },
-    }, [el('span', { class: 'status-dot', 'aria-hidden': 'true' }), state.connected ? 'Claude Code' : 'Connect AI']);
+    }, [el('span', { class: 'status-dot', 'aria-hidden': 'true' }), state.connected ? aiById(state.ai).label.split(' · ')[0] : 'Connect AI']);
 
     var waiting = count('waiting');
     var done = count('added');
@@ -380,46 +380,59 @@
     }));
   }
 
-  // Which model this AI analyses with. Switching the AI itself stays in the
-  // header; this only picks among the connected AI's models. Choosing one
-  // re-runs the connection test (stubbed here as a short delay), so a model
-  // that can't answer never replaces one that can.
-  var MODELS = [
-    { id: '', label: 'Its own default' },
-    { id: 'opus', label: 'Opus 5.5' },
-    { id: 'sonnet', label: 'Sonnet 5.5' },
-    { id: 'haiku', label: 'Haiku 4.5' },
+  // Who analyses, and with which model. Both are chosen right above the
+  // Analyse button. Picking another AI resets the model to that AI's default;
+  // either change re-runs the connection test (stubbed as a short delay), so
+  // a choice that can't answer never replaces one that can.
+  var AIS = [
+    { id: 'claude', label: 'Claude Code', models: [['', 'Its own default'], ['opus', 'Opus 5.5'], ['sonnet', 'Sonnet 5.5'], ['haiku', 'Haiku 4.5']] },
+    { id: 'codex', label: 'Codex', models: [['', 'Its own default'], ['gpt-5', 'GPT-5'], ['gpt-5-mini', 'GPT-5 mini']] },
+    { id: 'ollama', label: 'Ollama · this computer', models: [['qwen2.5vl', 'Qwen2.5-VL 7B'], ['llama3.2-vision', 'Llama 3.2 Vision']] },
   ];
+  var ADD_AI = '__add__';
 
-  function buildModelPicker() {
-    var select = el('select', { class: 'field proto-model-select', 'aria-label': 'Model', disabled: !!state.checking },
-      MODELS.map(function (m) { return el('option', { value: m.id, text: m.label }); }));
-    select.value = state.pending != null ? state.pending : state.model;
-    select.addEventListener('change', function () {
-      state.pending = select.value;
-      state.checking = true;
-      render();
-      window.setTimeout(function () {
-        state.checking = false;
-        state.model = state.pending;
-        state.pending = null;
-        render();
-        UI.toast('Now analysing with ' + modelLabel(state.model) + '.');
-      }, 1400);
-    });
-    return el('div', { class: 'proto-model' }, [
-      el('label', { class: 'proto-model-label' }, [
-        el('span', { class: 'section-label', text: 'Analyse with' }),
-        el('span', { class: 'proto-model-ai' }, [el('span', { class: 'status-dot', 'aria-hidden': 'true' }), 'Claude Code']),
-      ]),
-      select,
-      state.checking ? el('p', { class: 'proto-footer-meta', 'aria-live': 'polite' }, [el('span', { class: 'spinner', 'aria-hidden': 'true' }), ' Checking ' + modelLabel(state.pending) + ' answers…']) : null,
-    ]);
+  function aiById(id) {
+    return AIS.filter(function (a) { return a.id === id; })[0] || AIS[0];
   }
 
-  function modelLabel(id) {
-    var m = MODELS.filter(function (x) { return x.id === id; })[0];
-    return m ? m.label : id;
+  function modelLabel(ai, id) {
+    var m = aiById(ai).models.filter(function (x) { return x[0] === id; })[0];
+    return m ? m[1] : id;
+  }
+
+  function commitChoice(ai, model) {
+    state.checking = modelLabel(ai, model) + ' on ' + aiById(ai).label;
+    render();
+    window.setTimeout(function () {
+      state.checking = '';
+      state.ai = ai;
+      state.model = model;
+      render();
+      UI.toast('Analysing with ' + aiById(ai).label + ' · ' + modelLabel(ai, model) + '.');
+    }, 1400);
+  }
+
+  function selectField(name, label, options, value, onChange) {
+    var select = el('select', { class: 'field proto-select', 'aria-label': label, disabled: !!state.checking },
+      options.map(function (o) { return el('option', { value: o[0], text: o[1] }); }));
+    select.value = value;
+    select.addEventListener('change', function () { onChange(select.value); });
+    return el('label', { class: 'proto-pick' }, [el('span', { class: 'section-label', text: name }), select]);
+  }
+
+  function buildModelPicker() {
+    var ai = aiById(state.ai);
+    var aiOptions = AIS.map(function (a) { return [a.id, a.label]; }).concat([[ADD_AI, 'Connect another AI…']]);
+    return el('div', { class: 'proto-engine' }, [
+      selectField('AI', 'AI', aiOptions, ai.id, function (id) {
+        if (id === ADD_AI) { stubToast('opens Connect AI'); render(); return; }
+        commitChoice(id, aiById(id).models[0][0]);
+      }),
+      selectField('Model', 'Model', ai.models, state.model, function (id) { commitChoice(ai.id, id); }),
+      state.checking
+        ? el('p', { class: 'proto-footer-meta', 'aria-live': 'polite' }, [el('span', { class: 'spinner', 'aria-hidden': 'true' }), 'Checking ' + state.checking + ' answers…'])
+        : null,
+    ]);
   }
 
   function buildFooter() {
