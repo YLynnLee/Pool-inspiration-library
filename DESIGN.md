@@ -259,14 +259,18 @@ chrome.
 - **AI button:** a secondary button — a lit white dot and the AI's name when connected, a hollow
   dot and "Connect AI" when not. Opens a small popover (switch, disconnect with an inline
   confirm) rather than the full Connect dialog.
-- **Add button:** a secondary button for now, with a cloud-white count badge (a count is not a
-  decision, it stays the same tone as body text on a dark chip). While analysing it becomes a
-  spinner and "Analysing 2 of 5".
+- **Add button:** the header's one primary button, with a count badge for waiting links (a count is
+  not a decision, it stays on a dark-on-light chip). While analysing it becomes a spinner and
+  "Analysing 2 of 5"; after a run it reads "2 added · 1 failed" until the drawer is opened.
 
 ### Add drawer
 - A right-hand sheet (440px, graphite, hairline-strong left edge, floating-surface shadow) holding
   the whole add → analyse loop: the add field at the top, the added links as a list, and the
   Analyse action or its live progress pinned at the bottom.
+- Above Analyse sits the AI · model line: a lit dot and the AI's name left, the current model and a
+  chevron right, as inline text. It opens a full-width menu above itself (Model label, Switch AI…,
+  models as a radio list, same floating-surface shadow); picking a model re-tests it, and the line
+  and Analyse stay disabled meanwhile. While running, Stop is a full-width secondary button.
 - The link being analysed shows the Analysing status; a thin 4px white bar shows progress.
 
 ### Reference page
