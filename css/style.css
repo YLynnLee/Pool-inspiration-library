@@ -2180,22 +2180,26 @@ a.btn {
   vertical-align: middle;
 }
 
+/* Two columns (fields | Add button) so the note field lines up with the URL field. */
 .inbox-add {
   padding: 20px 24px 16px;
   border-bottom: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
 }
 
 .inbox-add-row {
-  display: flex;
-  gap: 8px;
+  display: contents;
 }
 
-.inbox-add-row .field {
-  flex: 1;
-  min-width: 0;
+.inbox-add-meta,
+.inbox-note-wrap {
+  grid-column: 1;
+}
+
+.inbox-add .notice-slot {
+  grid-column: 1 / -1;
 }
 
 .inbox-add-meta {
@@ -2203,6 +2207,28 @@ a.btn {
   align-items: baseline;
   gap: 12px;
   min-height: 18px;
+}
+
+.inbox-note-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  margin-top: -8px; /* cancels the form's flex gap while collapsed */
+  transition: grid-template-rows 0.2s var(--ease), opacity 0.2s var(--ease), margin-top 0.2s var(--ease);
+}
+
+.inbox-note-wrap.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  margin-top: 0;
+}
+
+.inbox-note-inner {
+  overflow: hidden;
+  min-height: 0;
+  /* room for the field's focus ring, which overflow:hidden would clip */
+  padding: 2px;
+  margin: -2px;
 }
 
 .inbox-list {
