@@ -29,7 +29,7 @@
       fix: 'Check its window is still open, then Retry.',
     },
     {
-      test: /no ai connected|not connected|disconnected|unauthori[sz]ed|\b401\b|invalid api key|api key/i,
+      test: /no ai connected|not connected|disconnected|unauthori[sz]ed|invalid api key/i,
       reason: 'The AI isn’t connected',
       fix: 'Connect it again from Connect AI in the header, then Retry.',
     },
@@ -172,7 +172,7 @@
     };
   }
 
-  var api = { derive: derive, explainFailure: explainFailure };
+  var api = { derive: derive, explainFailure: explainFailure, key: key, hostOf: hostOf };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LinkStatus = api;
 })(typeof window !== 'undefined' ? window : this);
