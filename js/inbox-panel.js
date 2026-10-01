@@ -75,22 +75,30 @@
 
   // ---- header button ------------------------------------------------------------
 
+  // Set once the collector has opened the drawer since a run finished: that
+  // is what clears "2 added · 1 failed" from the header.
+  var outcomeSeen = false;
+
   function fillButton(button) {
-    var status = AI.status();
-    var drain = AI.drain;
+    var label = window.LinkStatus.headerLabel(derived().header, { seen: outcomeSeen });
     button.textContent = '';
-    button.classList.toggle('is-busy', drain.running);
-    if (drain.running) {
+    button.classList.toggle('is-busy', label.kind === 'running');
+    if (label.kind === 'running') {
       button.appendChild(el('span', { class: 'spinner', 'aria-hidden': 'true' }));
-      button.appendChild(el('span', { text: drain.total ? 'Analysing ' + drain.step + ' of ' + drain.total : 'Analysing…' }));
+      button.appendChild(el('span', { text: label.text }));
       button.title = 'Show progress';
       return;
     }
+    if (label.kind === 'finished') {
+      button.appendChild(icon(derived().header.failed ? 'alert' : 'check'));
+      button.appendChild(el('span', { text: label.text }));
+      button.title = 'Show what was added';
+      return;
+    }
     button.appendChild(icon('plus'));
-    button.appendChild(el('span', { text: 'Add reference' }));
-    var count = status && status.inbox ? status.inbox.captures : 0;
-    if (count) button.appendChild(el('span', { class: 'count-badge', text: String(count) }));
-    button.title = count ? UI.plural(count, 'link') + ' waiting (I)' : 'Add a reference (I)';
+    button.appendChild(el('span', { text: label.text }));
+    if (label.count) button.appendChild(el('span', { class: 'count-badge', text: String(label.count) }));
+    button.title = label.count ? UI.plural(label.count, 'link') + ' waiting (I)' : 'Add a reference (I)';
   }
 
   function refreshButtons() {
@@ -98,7 +106,7 @@
   }
 
   window.buildInboxButton = function () {
-    var button = el('button', { class: 'btn btn-secondary inbox-btn', type: 'button', onclick: function () { openInbox(); } });
+    var button = el('button', { class: 'btn btn-primary inbox-btn', type: 'button', onclick: function () { openInbox(); } });
     fillButton(button);
     return button;
   };
@@ -115,6 +123,7 @@
     if (!isOpen()) return;
     var d = drawer;
     drawer = null;
+    document.removeEventListener('mousedown', onMenuOutside, true);
     d.overlay.classList.add('is-leaving');
     document.removeEventListener('keydown', onDrawerKey, true);
     window.setTimeout(function () { d.overlay.remove(); }, 180);
@@ -124,7 +133,8 @@
   function onDrawerKey(evt) {
     if (evt.key === 'Escape' && !document.querySelector('.add-modal-overlay, .popover')) {
       evt.stopPropagation();
-      closeInbox();
+      if (drawer.menu.open) closeModelMenu();
+      else closeInbox();
     }
   }
 
@@ -206,9 +216,11 @@
       list: list,
       footer: footer,
       footerKind: '',
+      menu: { open: false, models: null, failed: false, error: null },
       countLabel: countLabel,
       returnFocus: document.activeElement,
     };
+    outcomeSeen = true;
     document.body.appendChild(overlay);
     document.addEventListener('keydown', onDrawerKey, true);
     renderDrawer();
@@ -472,11 +484,129 @@
     return details;
   }
 
+  // ---- the AI · model line ----------------------------------------------------------
+  //
+  // One inline line above Analyse: the connected AI on the left, the model it
+  // will use on the right. Clicking it opens a menu above it to change the
+  // model or Switch AI…. Its state lives on the drawer (not in the DOM) so a
+  // footer rebuild doesn't close the menu.
+
+  function closeModelMenu() {
+    if (!drawer || !drawer.menu.open) return;
+    drawer.menu.open = false;
+    document.removeEventListener('mousedown', onMenuOutside, true);
+    renderFooter();
+  }
+
+  function onMenuOutside(evt) {
+    if (drawer && drawer.menu.open && !evt.target.closest('.ai-line-wrap')) closeModelMenu();
+  }
+
+  function openModelMenu() {
+    var menu = drawer.menu;
+    menu.open = true;
+    document.addEventListener('mousedown', onMenuOutside, true);
+    menu.models = null;
+    menu.failed = false;
+    renderFooter();
+    AI.listModels().then(function (r) {
+      menu.models = r.models;
+    }, function () {
+      menu.models = [];
+      menu.failed = true;
+    }).then(function () {
+      if (drawer && drawer.menu === menu && menu.open) renderFooter();
+    });
+  }
+
+  function pickModel(ai, id) {
+    var d = drawer;
+    d.menu.error = null;
+    closeModelMenu();
+    if (id === ai.model) return;
+    AI.setModel(id).then(function (r) {
+      UI.toast(r.message);
+    }, function (err) {
+      if (!isOpen()) return;
+      d.menu.error = { title: 'Couldn’t switch to ' + id, text: err.message + (err.helperDown ? '' : ' Still using ' + (ai.model || 'the previous model') + '.') };
+      renderFooter();
+    });
+  }
+
+  function buildModelMenu(ai) {
+    var menu = drawer.menu;
+    var body;
+    if (!menu.models) {
+      body = el('p', { class: 'model-menu-note', text: 'Loading models…' });
+    } else if (!menu.models.length) {
+      body = el('p', { class: 'model-menu-note', text: menu.failed ? 'Couldn’t list models.' : 'No models listed.' });
+    } else {
+      body = el('div', { class: 'model-options', role: 'radiogroup', 'aria-label': 'Model' }, window.LinkStatus.modelOptions(menu.models, ai.model).map(function (o) {
+        var picked = o.id === ai.model;
+        var option = el('button', {
+          class: 'model-option' + (picked ? ' is-picked' : ''),
+          type: 'button',
+          role: 'radio',
+          'aria-checked': picked ? 'true' : 'false',
+        }, [el('span', { class: 'model-option-name', text: o.label }), picked ? icon('check') : null]);
+        option.addEventListener('click', function () { pickModel(ai, o.id); });
+        return option;
+      }));
+    }
+    return el('div', { class: 'model-menu' }, [
+      el('div', { class: 'model-menu-head' }, [
+        el('span', { class: 'model-menu-label', text: 'Model' }),
+        el('button', {
+          class: 'link-btn',
+          type: 'button',
+          text: 'Switch AI…',
+          onclick: function () {
+            closeModelMenu();
+            AI.openConnect();
+          },
+        }),
+      ]),
+      body,
+    ]);
+  }
+
+  function buildAiLine(ai) {
+    var menu = drawer.menu;
+    var checking = AI.modelCheck.checking;
+    var dot = el('span', { class: 'ai-dot', 'aria-hidden': 'true' });
+    if (!ai.canChange) {
+      return el('div', { class: 'ai-line' }, [el('span', { class: 'ai-line-name' }, [dot, ai.name])]);
+    }
+    var right = checking
+      ? [el('span', { class: 'ai-line-model', text: 'Checking ' + checking + ' answers…' })]
+      : [ai.model ? el('span', { class: 'ai-line-model', text: ai.model }) : null, icon('chevron', 'ai-line-chevron')];
+    var button = el('button', {
+      class: 'ai-line is-button',
+      type: 'button',
+      'aria-haspopup': 'true',
+      'aria-expanded': menu.open ? 'true' : 'false',
+      disabled: !!checking,
+      title: 'Change the model',
+    }, [el('span', { class: 'ai-line-name' }, [dot, ai.name]), el('span', { class: 'ai-line-right' }, right)]);
+    button.addEventListener('click', function () {
+      if (menu.open) closeModelMenu();
+      else openModelMenu();
+    });
+    return el('div', { class: 'ai-line-wrap' }, [menu.open && !checking ? buildModelMenu(ai) : null, button]);
+  }
+
+  function resultNotice(header, drain) {
+    var text = window.LinkStatus.headerLabel(header).text;
+    if (header.kind !== 'finished' || (!header.added && !header.failed)) return UI.notice(drain.ok ? 'success' : 'warning', { title: drain.ok ? 'Done' : 'Stopped' });
+    return UI.notice(header.failed ? 'warning' : 'success', { title: text.charAt(0).toUpperCase() + text.slice(1) });
+  }
+
   function renderFooter() {
     var d = drawer;
     var kind = footerKind();
     var status = AI.status();
     var drain = AI.drain;
+    var checking = AI.modelCheck.checking;
 
     // While running, update the live pieces in place, so an open log keeps
     // its scroll position and the bar animates rather than being rebuilt.
@@ -487,46 +617,48 @@
     d.footerKind = kind;
     d.live = null;
     d.footer.textContent = '';
-    var label = status && status.config.connection ? status.config.connection.label : '';
+    var ai = status ? window.LinkStatus.describeAi(status.config) : null;
+    var waiting = status && status.inbox ? status.inbox.captures : 0;
 
     if (drain.error && kind !== 'running') {
       d.footer.appendChild(UI.notice('error', { title: 'Analysing stopped', text: drain.error }));
     }
+    if (d.menu.error && ai) {
+      d.footer.appendChild(UI.notice('error', { title: d.menu.error.title, text: d.menu.error.text }));
+    }
 
-    if (kind === 'no-helper') {
-      d.footer.appendChild(el('button', { class: 'btn btn-primary btn-block', type: 'button', text: 'Connect AI', onclick: AI.openConnect }));
-    } else if (kind === 'offline') {
+    if (kind === 'offline') {
       d.footer.appendChild(UI.notice('error', {
         title: 'Can’t reach the library helper',
         text: 'Check its window is still open.',
         actions: [{ label: 'Try again', run: AI.refresh }],
       }));
-    } else if (kind === 'no-ai') {
-      d.footer.appendChild(UI.notice('info', { title: 'No AI connected', text: 'Connect one to analyse your links.' }));
-      d.footer.appendChild(el('button', { class: 'btn btn-primary btn-block', type: 'button', text: 'Connect AI', onclick: AI.openConnect }));
-    } else if (kind === 'empty') {
-      d.footer.appendChild(el('p', { class: 'drawer-footer-text' }, [
-        el('span', { class: 'ai-dot', 'aria-hidden': 'true' }),
-        ' ' + label + ' is ready.',
-      ]));
-    } else if (kind === 'ready') {
-      var n = status.inbox.captures;
-      var dups = status.inbox.duplicates;
+      return;
+    }
+
+    if (kind === 'no-helper' || kind === 'no-ai') {
+      d.footer.appendChild(UI.notice('info', { title: 'No AI connected', text: 'Use Connect AI in the header to analyse your links.' }));
+      d.footer.appendChild(el('button', { class: 'btn btn-primary btn-block', type: 'button', text: 'Analyse', disabled: true }));
+      return;
+    }
+
+    if (kind === 'ready' || kind === 'empty') {
+      if (ai) d.footer.appendChild(buildAiLine(ai));
       d.footer.appendChild(el('button', {
         class: 'btn btn-primary btn-block',
         type: 'button',
-        text: 'Analyse ' + UI.plural(n, 'link'),
+        text: waiting ? 'Analyse ' + UI.plural(waiting, 'link') : 'Analyse',
+        disabled: !waiting || !!checking,
         onclick: function (evt) {
           evt.currentTarget.disabled = true;
           AI.startDrain();
         },
       }));
-      d.footer.appendChild(el('p', { class: 'drawer-footer-meta', text: 'With ' + label + ' · uses your plan or credit' + (dups ? ' · ' + dups + ' already in the library will just be cleared' : '') }));
     } else if (kind === 'running') {
       var bar = el('div', { class: 'progress' }, [el('div', { class: 'progress-bar' })]);
       var title = el('p', { class: 'drain-title' });
       var line = el('p', { class: 'drain-line' });
-      var stop = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, [icon('stop'), 'Stop']);
+      var stop = el('button', { class: 'btn btn-secondary btn-block', type: 'button' }, [icon('stop'), 'Stop']);
       stop.addEventListener('click', function () {
         stop.disabled = true;
         stop.lastChild.textContent = 'Stopping…';
@@ -534,18 +666,14 @@
       });
       var log = buildLog();
       d.live = { bar: bar, title: title, line: line, log: log.querySelector('pre') };
-      d.footer.appendChild(el('div', { class: 'drain-head' }, [
-        el('div', {}, [title, el('p', { class: 'drawer-footer-meta', text: 'With ' + label + '. You can close this — it keeps going.' })]),
-        stop,
-      ]));
+      d.footer.appendChild(title);
       d.footer.appendChild(bar);
       d.footer.appendChild(line);
+      d.footer.appendChild(stop);
       d.footer.appendChild(log);
       updateRunning(d.live);
     } else if (kind === 'finished') {
-      d.footer.appendChild(UI.notice(drain.ok ? 'success' : 'warning', { title: drain.ok ? 'Analysis finished' : 'Analysis finished with problems' }));
-      var summary = summaryLines(drain.lines);
-      if (summary.length) d.footer.appendChild(el('ul', { class: 'drain-summary' }, summary.map(function (s) { return el('li', { text: s }); })));
+      d.footer.appendChild(resultNotice(derived().header, drain));
       d.footer.appendChild(buildLog());
       d.footer.appendChild(el('div', { class: 'drawer-footer-actions' }, [
         el('button', {
@@ -560,13 +688,6 @@
         el('button', { class: 'btn btn-primary', type: 'button', text: 'Show new references', onclick: function () { window.location.reload(); } }),
       ]));
     }
-  }
-
-  // The "Summary" block API drains end with; agent drains print their own.
-  function summaryLines(lines) {
-    var at = lines.lastIndexOf('Summary');
-    if (at === -1) return [];
-    return lines.slice(at + 1).map(function (l) { return String(l).replace(/^-\s*/, '').trim(); }).filter(Boolean).slice(0, 8);
   }
 
   function updateRunning(live) {
@@ -613,6 +734,11 @@
   }
 
   AI.subscribe(function () {
+    if (AI.drain.running) outcomeSeen = false;
+    else if (isOpen()) outcomeSeen = true;
+    // Links waiting before a run must be remembered even with the drawer
+    // closed, or the header can't count them as added afterwards.
+    syncKnown(AI.status());
     refreshButtons();
     renderDrawer();
   });

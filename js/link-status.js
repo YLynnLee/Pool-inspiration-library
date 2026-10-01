@@ -172,7 +172,53 @@
     };
   }
 
-  var api = { derive: derive, explainFailure: explainFailure, key: key, hostOf: hostOf };
+  // What the header's Add button says. `seen` is true once the collector has
+  // opened the drawer since the run finished, which clears the outcome.
+  function headerLabel(header, options) {
+    var h = header || {};
+    if (h.kind === 'running') {
+      return { kind: 'running', text: h.total ? 'Analysing ' + h.step + ' of ' + h.total : 'Analysing…', count: 0 };
+    }
+    if (h.kind === 'finished' && !(options && options.seen) && (h.added || h.failed)) {
+      var parts = [];
+      if (h.added) parts.push(h.added + ' added');
+      if (h.failed) parts.push(h.failed + ' failed');
+      return { kind: 'finished', text: parts.join(' · '), count: 0 };
+    }
+    return { kind: 'idle', text: 'Add reference', count: h.waiting || 0 };
+  }
+
+  // The "AI · model" line, from the helper's public config: the AI's name,
+  // the model it will use, and whether the model can be changed here. A
+  // custom command picks its own model, so it has none to show or change.
+  function describeAi(config) {
+    if (!config || !config.connection) return null;
+    var label = String(config.connection.label || '');
+    var parts = label.split(' · ');
+    if (config.mode === 'api') {
+      return { name: parts[0], model: (config.api && config.api.model) || parts.slice(1).join(' · '), canChange: true };
+    }
+    var agent = config.agent || {};
+    if (agent.preset === 'custom') return { name: parts[0], model: '', canChange: false };
+    return { name: parts[0], model: agent.model || parts.slice(1).join(' · '), canChange: true };
+  }
+
+  // A model list as { id, label } choices, with the current model always
+  // present, once, and first.
+  function modelOptions(models, current) {
+    var options = (models || []).map(function (m) {
+      return typeof m === 'string' ? { id: m, label: m } : m;
+    });
+    if (!current) return options;
+    var found = null;
+    options = options.filter(function (o) {
+      if (o.id === current) found = o;
+      return o.id !== current;
+    });
+    return [found || { id: current, label: current }].concat(options);
+  }
+
+  var api = { derive: derive, explainFailure: explainFailure, key: key, hostOf: hostOf, headerLabel: headerLabel, describeAi: describeAi, modelOptions: modelOptions };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LinkStatus = api;
 })(typeof window !== 'undefined' ? window : this);

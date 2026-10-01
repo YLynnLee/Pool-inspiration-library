@@ -149,3 +149,81 @@ test('explainFailure: unknown output falls back to a generic reason that still s
   assert.ok(e.reason);
   assert.match(e.fix, /Retry/);
 });
+
+// ---- the Add button in the header -------------------------------------------------
+
+const { headerLabel, describeAi, modelOptions } = require('../js/link-status.js');
+
+const header = (o) => Object.assign({ kind: 'idle', waiting: 0, step: 0, total: 0, added: 0, failed: 0 }, o);
+
+test('header: idle with nothing waiting is just the add button', () => {
+  assert.deepEqual(headerLabel(header({})), { kind: 'idle', text: 'Add reference', count: 0 });
+});
+
+test('header: idle shows how many links are waiting', () => {
+  assert.deepEqual(headerLabel(header({ waiting: 3 })), { kind: 'idle', text: 'Add reference', count: 3 });
+});
+
+test('header: running reads "Analysing 2 of 3", or plain "Analysing…" before the total is known', () => {
+  assert.deepEqual(headerLabel(header({ kind: 'running', step: 2, total: 3 })), { kind: 'running', text: 'Analysing 2 of 3', count: 0 });
+  assert.equal(headerLabel(header({ kind: 'running' })).text, 'Analysing…');
+});
+
+test('header: a finished run reports its outcome until seen', () => {
+  assert.equal(headerLabel(header({ kind: 'finished', added: 2, failed: 1 })).text, '2 added · 1 failed');
+  assert.equal(headerLabel(header({ kind: 'finished', added: 2 })).text, '2 added');
+  assert.equal(headerLabel(header({ kind: 'finished', failed: 1 })).text, '1 failed');
+  assert.equal(headerLabel(header({ kind: 'finished', added: 2 })).kind, 'finished');
+});
+
+test('header: a finished run with nothing to report, or one already seen, goes back to idle', () => {
+  assert.equal(headerLabel(header({ kind: 'finished', waiting: 1 })).kind, 'idle');
+  const seen = headerLabel(header({ kind: 'finished', added: 2, waiting: 1 }), { seen: true });
+  assert.deepEqual(seen, { kind: 'idle', text: 'Add reference', count: 1 });
+});
+
+// ---- the AI · model line ------------------------------------------------------------
+
+function cfg(o) {
+  return Object.assign({
+    connection: { label: 'Claude Code · opus', ai: 'claude' },
+    mode: 'agent',
+    agent: { preset: 'claude', command: 'claude --print', model: '' },
+    api: { provider: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-5' },
+  }, o);
+}
+
+test('AI line: an agent app shows its name and the model the connection test reported', () => {
+  assert.deepEqual(describeAi(cfg({})), { name: 'Claude Code', model: 'opus', canChange: true });
+});
+
+test('AI line: a model chosen by the collector wins over the one the test reported', () => {
+  const c = cfg({ agent: { preset: 'claude', command: 'claude', model: 'sonnet' } });
+  assert.equal(describeAi(c).model, 'sonnet');
+});
+
+test('AI line: an API shows the provider and its model', () => {
+  const c = cfg({ mode: 'api', connection: { label: 'OpenAI · gpt-5', ai: 'openai' } });
+  assert.deepEqual(describeAi(c), { name: 'OpenAI', model: 'gpt-5', canChange: true });
+});
+
+test('AI line: a custom command has no model to show or change', () => {
+  const c = cfg({ connection: { label: 'my-agent', ai: null }, agent: { preset: 'custom', command: 'my-agent -p', model: '' } });
+  assert.deepEqual(describeAi(c), { name: 'my-agent', model: '', canChange: false });
+});
+
+test('AI line: an agent whose model is not known shows the name only, but can still change it', () => {
+  const c = cfg({ connection: { label: 'Claude Code', ai: 'claude' } });
+  assert.deepEqual(describeAi(c), { name: 'Claude Code', model: '', canChange: true });
+});
+
+test('AI line: not connected describes nothing', () => {
+  assert.equal(describeAi(cfg({ connection: null })), null);
+  assert.equal(describeAi(null), null);
+});
+
+test('model choices: strings and { id, label } both work, and the current model is always listed once, first', () => {
+  assert.deepEqual(modelOptions(['a', { id: 'b', label: 'B' }], 'b'), [{ id: 'b', label: 'B' }, { id: 'a', label: 'a' }]);
+  assert.deepEqual(modelOptions(['a'], 'zzz'), [{ id: 'zzz', label: 'zzz' }, { id: 'a', label: 'a' }]);
+  assert.deepEqual(modelOptions([], ''), []);
+});
