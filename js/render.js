@@ -584,34 +584,29 @@
   function buildEmptyState(filters, libraryTotal) {
     var hasFilters = !!(filters.query || filters.category || filters.keyword);
     var title;
-    var hint = '';
     var action = null;
     if (hasFilters) {
       title = filters.query ? 'Nothing matches “' + filters.query + '”.' : 'Nothing matches these filters.';
-      hint = 'Try fewer words, or remove a filter above.';
       action = el('button', {
-        class: 'btn btn-ghost',
+        class: 'btn btn-secondary',
         type: 'button',
         text: 'Clear filters',
         onclick: function () { setFilters(Object.assign({}, NO_FILTERS, { show: filters.show }), true); },
       });
     } else if (filters.show === 'drafts') {
       title = 'No drafts.';
-      hint = 'Every capture came through cleanly.';
-      action = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Back to all', onclick: function () { setFilters(NO_FILTERS, true); } });
+      action = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Back to all', onclick: function () { setFilters(NO_FILTERS, true); } });
     } else if (filters.show === 'hidden') {
       title = 'Nothing hidden.';
-      action = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Back to all', onclick: function () { setFilters(NO_FILTERS, true); } });
+      action = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Back to all', onclick: function () { setFilters(NO_FILTERS, true); } });
     } else if (!libraryTotal) {
       title = 'Your library is empty.';
-      hint = 'Paste a link anywhere on this page to add it to the inbox, then drain it.';
-      action = el('button', { class: 'btn btn-primary', type: 'button', text: 'Open inbox', onclick: function () { if (window.openInbox) window.openInbox(); } });
+      action = el('button', { class: 'btn btn-primary', type: 'button', text: 'Add a reference', onclick: function () { if (window.openInbox) window.openInbox(); } });
     } else {
       title = 'No references to show.';
     }
     return el('div', { class: 'empty-state' }, [
       el('p', { class: 'empty-title', text: title }),
-      hint ? el('p', { class: 'empty-hint', text: hint }) : null,
       action,
     ]);
   }
@@ -651,7 +646,7 @@
 
     function action(label, className, title, handler) {
       return el('button', {
-        class: 'tile-action ' + className,
+        class: 'btn btn-secondary btn-sm ' + className,
         type: 'button',
         title: title,
         onclick: function (evt) {
@@ -666,12 +661,12 @@
       // A hidden reference's two ways out, side by side and labelled,
       // instead of one ambiguous icon.
       tile.appendChild(el('div', { class: 'tile-actions' }, [
-        action('Restore', 'is-restore', 'Show this reference in the library again', function () {
+        action('Restore', '', 'Show this reference in the library again', function () {
           restoreEntry(entry.id);
           refreshGrid();
           UI.toast('Restored ' + entry.name + '.');
         }),
-        action('Delete…', 'is-delete', 'Delete this reference for good', function () {
+        action('Delete…', 'btn-danger-quiet', 'Delete this reference for good', function () {
           openPurgeModal(entry);
         }),
       ]));
@@ -680,14 +675,14 @@
 
     if (isDraft) {
       tile.appendChild(el('div', { class: 'tile-actions' }, [
-        action('Resolve…', 'is-resolve', 'Assign a category to this draft', function () {
+        action('Resolve…', '', 'Assign a category to this draft', function () {
           openResolveModal(entry);
         }),
       ]));
     }
 
     tile.appendChild(el('button', {
-      class: 'tile-hide-btn',
+      class: 'icon-btn tile-hide-btn',
       type: 'button',
       title: 'Delete this reference',
       'aria-label': 'Delete ' + entry.name,
@@ -708,7 +703,7 @@
     var root = el('div', { class: 'view view-entry' });
 
     root.appendChild(
-      el('a', { class: 'back-link', href: '#/', text: '‹ All references' })
+      el('a', { class: 'back-link', href: '#/' }, [icon('back'), 'All references'])
     );
 
     if (!entry) {
@@ -1009,7 +1004,7 @@
     var filename = ds.referenceId + '-DESIGN.md';
     var actions = el('div', { class: 'design-download-actions' });
 
-    var downloadBtn = el('button', { class: 'copy-btn', type: 'button', text: 'Download .md' });
+    var downloadBtn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: 'Download .md' });
     downloadBtn.addEventListener('click', function () {
       var text = window.serializeDesignMd(ds);
       if ('download' in document.createElement('a')) {
@@ -1033,7 +1028,7 @@
     });
     actions.appendChild(downloadBtn);
 
-    var copyBtn = el('button', { class: 'copy-btn', type: 'button', text: 'Copy .md' });
+    var copyBtn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: 'Copy .md' });
     copyBtn.addEventListener('click', function () {
       copyText(window.serializeDesignMd(ds), function (ok) {
         flashCopied(copyBtn, ok ? 'Copied!' : 'Copy failed');
@@ -1273,7 +1268,7 @@
   }
 
   function buildPromptBlock(label, text) {
-    var copyBtn = el('button', { class: 'copy-btn', type: 'button', text: 'Copy' });
+    var copyBtn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: 'Copy' });
     copyBtn.addEventListener('click', function () {
       copyText(text, function (ok) {
         flashCopied(copyBtn, ok ? 'Copied!' : 'Copy failed');
@@ -1332,10 +1327,9 @@
     );
     var imagePaths = window.computeImagePurge(purge.removed, purge.remaining);
 
-    var status = el('p', { class: 'add-modal-status', 'aria-live': 'polite' });
-    function setStatus(text, isError) {
-      status.textContent = text;
-      status.classList.toggle('is-error', !!isError);
+    var status = el('div', { class: 'notice-slot' });
+    function setError(title, text) {
+      UI.setNotice(status, title ? 'error' : null, { title: title, text: text });
     }
 
     var list = el('ul', { class: 'purge-modal-list' });
@@ -1346,7 +1340,7 @@
     });
 
     var cancelBtn = el('button', {
-      class: 'add-modal-cancel',
+      class: 'btn btn-secondary',
       type: 'button',
       text: 'Cancel',
       onclick: closePurgeModal,
@@ -1357,7 +1351,7 @@
     confirmBtn.addEventListener('click', function () {
       confirmBtn.disabled = true;
       confirmBtn.textContent = 'Purging…';
-      setStatus('', false);
+      setError(null);
 
       // The library write below is the one irreversible-in-view step: once
       // it succeeds the entry is gone from the grid no matter what happens
@@ -1409,7 +1403,7 @@
             savePendingPurge({ id: target.id, name: target.name, imagePaths: imagePaths });
             refreshGrid();
           }
-          setStatus((err && err.message) || 'Could not purge. Nothing was changed.', true);
+          setError('Couldn’t delete ' + target.name, (err && err.message) || 'Nothing was changed. Try again.');
           confirmBtn.disabled = false;
           confirmBtn.textContent = confirmLabel;
         });
@@ -1424,7 +1418,7 @@
         imagePaths.length ? el('li', { text: UI.plural(imagePaths.length, 'screenshot file') }) : null,
       ]),
       list,
-      el('p', { class: 'purge-modal-note', text: 'It can only be brought back from git, if it was committed.' }),
+      UI.notice('warning', { title: 'This can’t be undone', text: 'It can only be brought back from git, if it was committed.' }),
       status,
       el('div', { class: 'add-modal-actions' }, [cancelBtn, confirmBtn]),
     ]);
@@ -1460,13 +1454,12 @@
     var categories = window.getCategories();
     var selectedId = null;
 
-    var status = el('p', { class: 'add-modal-status', 'aria-live': 'polite' });
-    function setStatus(text, isError) {
-      status.textContent = text;
-      status.classList.toggle('is-error', !!isError);
+    var status = el('div', { class: 'notice-slot' });
+    function setError(title, text) {
+      UI.setNotice(status, title ? 'error' : null, { title: title, text: text });
     }
 
-    var confirmBtn = el('button', { class: 'add-modal-save', type: 'button', text: 'Resolve' });
+    var confirmBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Resolve' });
     confirmBtn.disabled = true;
 
     var list = el('div', { class: 'resolve-modal-list', role: 'radiogroup', 'aria-label': 'Category' });
@@ -1496,7 +1489,7 @@
       if (!selectedId) return;
       confirmBtn.disabled = true;
       confirmBtn.textContent = 'Resolving…';
-      setStatus('', false);
+      setError(null);
 
       var updated = window.resolveDraft(window.getEntries(), entry.id, selectedId);
 
@@ -1508,14 +1501,14 @@
           refreshGrid();
         })
         .catch(function (err) {
-          setStatus((err && err.message) || 'Could not resolve. Nothing was changed.', true);
+          setError('Couldn’t resolve ' + entry.name, (err && err.message) || 'Nothing was changed. Try again.');
           confirmBtn.disabled = false;
           confirmBtn.textContent = 'Resolve';
         });
     });
 
     var cancelBtn = el('button', {
-      class: 'add-modal-cancel',
+      class: 'btn btn-secondary',
       type: 'button',
       text: 'Close',
       onclick: closeResolveModal,
@@ -1523,24 +1516,11 @@
 
     var modalChildren = [
       el('h2', { class: 'add-modal-title', text: 'Resolve draft' }),
-      el('p', { class: 'resolve-modal-copy' }, [
-        document.createTextNode(entry.name + (entry.draftReason ? ' — ' + entry.draftReason : '')),
-      ]),
+      UI.notice('warning', {
+        title: entry.name + (entry.draftReason ? ' — ' + entry.draftReason : ' couldn’t be captured usefully'),
+        text: 'A category won’t fix the screenshot. Re-capture the site by hand and replace its screenshot.',
+      }),
     ];
-    modalChildren.push(
-      el('p', { class: 'resolve-modal-copy' }, [
-        document.createTextNode(
-          'This draft is here because its site could not be captured usefully, not because it ' +
-            'lacks a category — a drain always assigns one. ' +
-            (categories.length > 0
-              ? "Re-picking a category below won't fix the screenshot; "
-              : "Picking a category here won't fix the screenshot, and there are no categories " +
-                'to pick from yet anyway; ') +
-            "the real fix is re-capturing the site by hand and replacing this entry's " +
-            "screenshot yourself. Close this if you're not ready to do that."
-        ),
-      ])
-    );
     if (categories.length > 0) {
       modalChildren.push(list);
     }

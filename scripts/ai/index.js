@@ -103,7 +103,7 @@ async function testConnection(config) {
         var model = extractAgentModel(text);
         return {
           ok: true,
-          message: argv[0] + ' answered. It will run the drain with its own tools and model' + (model ? ' (' + model + ').' : '.'),
+          message: argv[0] + ' answered. It will analyse links with its own tools and model' + (model ? ' (' + model + ').' : '.'),
           model: model,
         };
       }
@@ -122,7 +122,7 @@ async function testConnection(config) {
       ],
     }]);
     if (/\bred\b/i.test(reply)) return { ok: true, message: config.api.model + ' answered and can see images.' };
-    return { ok: false, message: config.api.model + ' answered "' + reply.trim().slice(0, 80) + '" to a solid red image — it may not support images, and a drain needs vision.' };
+    return { ok: false, message: config.api.model + ' answered "' + reply.trim().slice(0, 80) + '" to a solid red image — it may not support images, and analysing needs vision.' };
   } catch (e) {
     return { ok: false, message: e.message };
   }
