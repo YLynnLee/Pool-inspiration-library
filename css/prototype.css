@@ -152,25 +152,6 @@
   color: var(--text);
 }
 
-/* KEEP? keywords as plain labels: no border, no hover, nothing to click */
-.keyword-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 14px;
-  color: var(--text-dim);
-  line-height: 1.6;
-}
-
-.keyword-list li:not(:last-child)::after {
-  content: '·';
-  margin: 0 10px;
-  color: var(--text-faint);
-}
-
 a.btn { text-decoration: none; }
 
 .proto-entry .detail-tabs { margin-top: 56px; }

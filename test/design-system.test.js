@@ -383,3 +383,35 @@ test('parseDosAndDonts: real Locomotive and Ciao Energy fixtures parse into non-
     assert.ok(result.donts.length > 0, entry.referenceId + " should have at least one don't");
   });
 });
+
+// ---- Character vs measurement notes -------------------------------------
+
+test('serializeDesignMd: carries the description in the front matter and the measurement notes as a closing section', () => {
+  const entry = makeMinimalEntry({
+    description: 'A quiet, paper-white gallery with one ink colour.',
+    measurementNotes: 'Colours measured from the live DOM; radii normalised.',
+    sections: { overview: 'A plain overview.', shapes: 'Square.' },
+  });
+  const { yaml, body } = splitFrontMatter(serializeDesignMd(entry));
+  assert.ok(yaml.includes('A quiet, paper-white gallery with one ink colour.'));
+  assert.equal(yaml.includes('Colours measured from the live DOM'), false, 'notes stay out of the description');
+  const notesAt = body.indexOf('## How this was measured');
+  assert.notEqual(notesAt, -1);
+  assert.ok(body.indexOf('Colours measured from the live DOM; radii normalised.') > notesAt);
+  assert.ok(notesAt > body.indexOf('## Shapes'), 'notes come after the canonical sections');
+});
+
+test('serializeDesignMd: an older entry with only a description serialises as before, with no notes section', () => {
+  const md = serializeDesignMd(makeMinimalEntry());
+  const { yaml, body } = splitFrontMatter(md);
+  assert.ok(yaml.includes('Measured from the live site; nothing inferred.'));
+  assert.equal(body.includes('How this was measured'), false);
+});
+
+test('serializeDesignSystems: round-trips measurementNotes alongside the description', () => {
+  const entry = makeMinimalEntry({ measurementNotes: 'Harvest was thin; type inferred.' });
+  const text = serializeDesignSystems([entry]);
+  const { DESIGN_SYSTEMS } = new Function(text + '; return { DESIGN_SYSTEMS };')();
+  assert.equal(DESIGN_SYSTEMS[0].measurementNotes, 'Harvest was thin; type inferred.');
+  assert.equal(DESIGN_SYSTEMS[0].description, entry.description);
+});

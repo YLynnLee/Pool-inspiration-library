@@ -47,12 +47,12 @@ spacing:
   xl: "32px"
   xxl: "48px"
 components:
-  button-ghost:
+  button-secondary:
     backgroundColor: "transparent"
     textColor: "{colors.ash}"
     rounded: "{rounded.sm}"
     padding: "9px 16px"
-  button-ghost-hover:
+  button-secondary-hover:
     backgroundColor: "transparent"
     textColor: "{colors.cloud}"
     rounded: "{rounded.sm}"
@@ -213,31 +213,73 @@ is the one fully circular (50%) affordance in the system, reserved for a single 
 ## Components
 
 ### Buttons
-- **Shape:** 7–8px radius (`rounded.sm`).
-- **Ghost / default** (`.btn-ghost`, copy-btn, add-modal-cancel): transparent background,
-  1px hairline border, dim text; hover shifts border and text to white (destructive actions
-  like purge shift to a soft red instead, `#ff8a8a`).
-- **Primary** (add-modal-save): filled white, black ink text, `brightness(1.08)` on hover,
-  0.6 opacity when disabled — the reference's "white-on-black, only primary action" rule applied
-  directly.
-- **Transition:** border-color, color, background all animate on the shared 0.15s ease curve
-  (`cubic-bezier(0.22, 1, 0.36, 1)`).
+One set, used by every button in the app (`.btn` plus a variant). Build new UI from these; don't
+add a bespoke button style.
+- **Shape:** 8px radius (`rounded.sm`), 9px 16px padding, 13px text. Link elements styled as
+  buttons (`<a class="btn">`) never underline. Icon-only buttons are 30px squares at 7px radius.
+- **Primary** (`.btn-primary`): filled white, black ink, `brightness(1.08)` on hover — the one
+  main action of a surface.
+- **Secondary** (`.btn-secondary`): graphite fill, hairline-strong border, white text; hover
+  lifts the border and fill. The default for everything that isn't the main action — header
+  buttons, modal Cancel/Close, Copy/Download, tile actions.
 - **Danger** (`.btn-danger`): filled soft red (`#ff8a8a`), used only on the button that deletes
-  for good (the purge confirmation, the disconnect confirmation). Never white, never amber.
+  for good. **Quiet danger** (`.btn-danger-quiet`, on a secondary): looks secondary, turns red
+  on hover — for a destructive option that isn't the confirmation (Delete… on a tile).
+- **Small** (`.btn-sm`) and **block** (`.btn-block`, full width) are modifiers on any variant.
+- **Icon-only** (`.icon-btn`): borderless, faint icon, brightens on hover; always has an
+  `aria-label`. **Link-button** (`.link-btn`): text-only, for a quiet in-flow action ("+ Add a
+  note", back).
+- **States:** hover as above; disabled is 0.5 opacity with no pointer events; focus-visible is
+  the app-wide two-layer ring, clipped to the button's own radius.
+- **Transition:** border-color, color, background animate on the shared 0.15s ease curve.
+
+### Notice
+The one box for every problem or outcome (`UI.notice(tone, { title, text, actions })`). Use it in
+the drawer, the Connect AI flow and every modal instead of ad-hoc coloured text.
+- **Tones:** info, success, warning (Draft Amber), error (danger red).
+- **Layout:** an icon column (16px) then one column: the **title** says what happened, the
+  optional **text** says how to fix it, and up to two **actions** (small secondary buttons) sit
+  under the text, left-aligned.
+- **Surface:** warning and error use a translucent tint of their colour with a full 1px border in
+  it; info and success are steel with a hairline-strong border. No thick side stripe.
+- **Semantics:** errors carry `role="alert"`; the other tones `role="status"`.
+- **Toasts vs notices:** a toast only confirms something brief or undoable. Anything the
+  collector needs to read or act on is a notice.
+
+### Status label
+`UI.status(kind)`: a small mono uppercase label saying where a link is — **Waiting** (grey dot),
+**Analysing** (spinner), **Added** (check, white), **Failed** (alert icon, danger red).
+
+### Icons
+16px, 1.5 stroke, round caps, drawn in `currentColor` (`UI.icon`). The set includes alert, info,
+external link, back and forward. Text glyphs (‹ ↗ → ←) never stand in for icons in the app's
+chrome.
 
 ### Header controls
-- **AI pill:** full-pill ghost button — a lit white dot and the AI's name when connected, a
-  hollow dot and "Connect AI" when not. Opens a small popover (switch, disconnect with an inline
+- **AI button:** a secondary button — a lit white dot and the AI's name when connected, a hollow
+  dot and "Connect AI" when not. Opens a small popover (switch, disconnect with an inline
   confirm) rather than the full Connect dialog.
-- **Inbox button:** ghost button with a cloud-white count badge (not white — a count is not a
-  decision, it stays the same tone as body text on a dark chip). While a drain runs it becomes a
-  spinner and "Draining 2/5".
+- **Add button:** a secondary button for now, with a cloud-white count badge (a count is not a
+  decision, it stays the same tone as body text on a dark chip). While analysing it becomes a
+  spinner and "Analysing 2 of 5".
 
-### Inbox drawer
+### Add drawer
 - A right-hand sheet (440px, graphite, hairline-strong left edge, floating-surface shadow) holding
-  the whole capture → drain loop: the add field at the top, the waiting captures as a list, and
-  the drain action or its live progress pinned at the bottom.
-- The capture being analysed gets a 2px white inset edge; a thin 4px white bar shows progress.
+  the whole add → analyse loop: the add field at the top, the added links as a list, and the
+  Analyse action or its live progress pinned at the bottom.
+- The link being analysed shows the Analysing status; a thin 4px white bar shows progress.
+
+### Reference page
+- Order: "Library" back link, draft notice (warning, with **Resolve…**) if a draft, screenshots,
+  caption block, Summary, Keywords, then the tabs.
+- **Caption block:** the title in the display serif italic, the category name and its one-line
+  definition as a single dim caption line beneath it; **Visit site** (secondary, small, external
+  icon) and **Delete…** (quiet danger, small) on the right, stacking under the text at phone width.
+- Summary and Keywords sit under the same mono section labels, 15px body and 66ch measure as
+  Breakdown. Keywords are plain text separated by middots (the separator trails each item, so no
+  line starts with one). Nothing here is a link except the two actions.
+- Breakdown opens with **Character**, a 1–3 sentence description of the style; measurement notes
+  live in a collapsed "How this was measured" section at the end.
 
 ### Search and filter tokens
 - The search field carries a leading search icon and a `/` key hint; typing opens a suggestions
@@ -251,7 +293,7 @@ is the one fully circular (50%) affordance in the system, reserved for a single 
 
 ### Toasts
 - Bottom-centre, steel, hairline-strong, with at most one white text action (Undo, Show new
-  references). Used to confirm reversible actions instead of blocking dialogs.
+  references). Only for brief or undoable confirmations — problems go in a notice.
 
 ### Pills / Chips
 - **Style:** graphite background, hairline border, fully rounded (999px), dim text.
@@ -259,7 +301,7 @@ is the one fully circular (50%) affordance in the system, reserved for a single 
   inactive hover only shifts the border to hairline-strong and brightens text — never introduces
   color on hover, only on true selection.
 - **Static chip variant** (category vocabulary chips) suppresses hover entirely — it is
-  informational, not actionable.
+  informational, not actionable. Reference-page keywords are not chips; they are plain text.
 
 ### Cards / Tiles
 - **Corner style:** 16px radius, overflow hidden so the cover image clips to the same radius.
@@ -269,7 +311,7 @@ is the one fully circular (50%) affordance in the system, reserved for a single 
 - **Draft state:** border switches to dashed draft-amber; a pill-shaped amber badge (tracked mono)
   sits top-left, an amber resolve action bar sits along the tile's bottom edge.
 - **Hidden state:** shown only in the Hidden view — dashed hairline border, the image and meta at
-  0.45 opacity, a "Hidden" badge (tracked mono), and a two-button action bar (Restore / Delete…)
+  0.45 opacity, a "Hidden" badge (tracked mono), and a two-button action bar (Restore / Delete…, secondary small buttons)
   at full strength, so the ways out stay legible.
 
 ### Inputs / Fields
@@ -279,14 +321,17 @@ is the one fully circular (50%) affordance in the system, reserved for a single 
   (`0 0 0 2px bg, 0 0 0 4px accent`) rather than a glow, reserved for non-input focusable elements.
 
 ### Navigation / Back link
-- **Style:** small (13px) dim text with a leading glyph, no underline at rest; hover brightens to
+- **Style:** small (13px) dim text with a leading back icon, no underline at rest; hover brightens to
   full text color. No persistent nav chrome elsewhere — the filter bar and grid are the primary
   navigation surface.
 
 ### Modals (Add / Purge / Resolve)
 - **Style:** graphite background, hairline-strong border, 16px radius, floating-surface shadow,
   centered over a dark scrim (`rgba(5,5,5,0.72)`) with a 0.15s fade-in.
-- **Title:** Fraunces italic, matching the page-level display treatment at a smaller size.
+- **Title:** Fraunces italic, matching the page-level display treatment at a smaller size. Every
+  title (library, drawer, modals, reference) uses it.
+- **Actions:** Cancel/Close is secondary, the confirming action is primary (or danger when it
+  deletes). Errors appear in a notice above the actions.
 
 ## Do's and Don'ts
 
@@ -307,8 +352,8 @@ is the one fully circular (50%) affordance in the system, reserved for a single 
 ### Don't:
 - **Don't** add ambient shadow to resting surfaces (tiles, chips, inputs) — shadow only responds
   to hover, focus, or floating-layer state (the Flat-At-Rest Rule).
-- **Don't** introduce a saturated brand accent; amber is reserved for drafts and a soft red is
-  reserved for destructive hover only — the interface's own accent is white, not a hue.
+- **Don't** introduce a saturated brand accent; amber is reserved for drafts and warnings, and a soft red for
+  destructive actions and errors only — the interface's own accent is white, not a hue.
 - **Don't** round anything filterable/tag-like to less than a full pill, or a structural container
   to more than 16px — the radius scale signals what kind of thing an element is.
 - **Don't** set body-length copy in the mono label font, or a label/badge in Inter — the two

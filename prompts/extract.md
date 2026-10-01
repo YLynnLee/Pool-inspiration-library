@@ -22,4 +22,4 @@ Reference (an id from `data/library.js`, or its exact `sourceUrl`):
 ## Finishing
 
 Report per the procedure's "Reporting" section: which values were measured from the harvest and
-which were inferred (and declared in `description:`), and which sections were omitted and why.
+which were inferred (and declared in `measurementNotes:`), and which sections were omitted and why.

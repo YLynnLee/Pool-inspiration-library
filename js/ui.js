@@ -34,6 +34,11 @@
     stop: '<rect x="4.5" y="4.5" width="7" height="7" rx="1"/>',
     tag: '<path d="M2.5 8.2V3a.5.5 0 0 1 .5-.5h5.2l5.3 5.3-5.7 5.7z"/><circle cx="5.5" cy="5.5" r=".8"/>',
     folder: '<path d="M2 4.5a1 1 0 0 1 1-1h3.2l1.3 1.5H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/>',
+    alert: '<path d="M8 2.5 14 13H2z"/><path d="M8 6.5v3"/><circle cx="8" cy="11.3" r=".5"/>',
+    info: '<circle cx="8" cy="8" r="6"/><path d="M8 7.5v3.5"/><circle cx="8" cy="5.3" r=".5"/>',
+    external: '<path d="M9 3h4v4M13 3 7.5 8.5"/><path d="M11 9.5V12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2.5"/>',
+    back: '<path d="M9.5 3.5 5 8l4.5 4.5"/>',
+    forward: '<path d="M6.5 3.5 11 8l-4.5 4.5"/>',
   };
 
   function icon(name, extraClass) {
@@ -43,6 +48,55 @@
       (ICON_PATHS[name] || '') +
       '</svg>';
     return span;
+  }
+
+  // ---- notice ------------------------------------------------------------------
+  // The one box for every problem or outcome: tone, a title saying what
+  // happened, optional text saying how to fix it, and up to two actions
+  // stacked under the text. Errors are announced as alerts, the rest as status.
+
+  var NOTICE_ICONS = { info: 'info', success: 'check', warning: 'alert', error: 'alert' };
+
+  function notice(tone, options) {
+    options = options || {};
+    var body = [el('p', { class: 'notice-title', text: options.title || '' })];
+    if (options.text) body.push(el('p', { class: 'notice-text', text: options.text }));
+    var actions = (options.actions || []).slice(0, 2);
+    if (actions.length) {
+      body.push(el('div', { class: 'notice-actions' }, actions.map(function (action) {
+        return el('button', {
+          class: 'btn btn-secondary btn-sm',
+          type: 'button',
+          text: action.label,
+          onclick: action.run,
+        });
+      })));
+    }
+    return el('div', { class: 'notice is-' + tone, role: tone === 'error' ? 'alert' : 'status' }, [
+      icon(NOTICE_ICONS[tone] || 'info', 'notice-icon'),
+      el('div', { class: 'notice-body' }, body),
+    ]);
+  }
+
+  // Fill (or, with no tone, empty) a `.notice-slot` — the spot a form or modal
+  // reserves for whatever it needs to report.
+  function setNotice(slot, tone, options) {
+    slot.textContent = '';
+    if (tone) slot.appendChild(notice(tone, options));
+  }
+
+  // ---- status label ----------------------------------------------------------------
+  // Where a link is in its life: Waiting (dot), Analysing (spinner),
+  // Added (check), Failed (alert icon).
+
+  var STATUS_LABELS = { waiting: 'Waiting', analysing: 'Analysing', added: 'Added', failed: 'Failed' };
+
+  function status(kind) {
+    var mark = kind === 'analysing' ? el('span', { class: 'spinner', 'aria-hidden': 'true' })
+      : kind === 'added' ? icon('check')
+      : kind === 'failed' ? icon('alert')
+      : el('span', { class: 'status-dot', 'aria-hidden': 'true' });
+    return el('span', { class: 'status is-' + kind }, [mark, STATUS_LABELS[kind] || '']);
   }
 
   // ---- toasts ---------------------------------------------------------------
@@ -168,6 +222,9 @@
   window.UI = {
     el: el,
     icon: icon,
+    notice: notice,
+    setNotice: setNotice,
+    status: status,
     toast: toast,
     popover: popover,
     closePopover: closePopover,

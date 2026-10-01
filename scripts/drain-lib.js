@@ -111,7 +111,10 @@ function validateDesignSystem(ds, referenceId, errors) {
   }
   if (!isFilled(ds.name)) errors.push('designSystem.name is empty');
   if (!isFilled(ds.description)) {
-    errors.push('designSystem.description is empty — it must say what was measured and what was inferred');
+    errors.push('designSystem.description is empty — it must describe the style in one to three sentences');
+  }
+  if (!isFilled(ds.measurementNotes)) {
+    errors.push('designSystem.measurementNotes is empty — it must say what was measured and what was inferred');
   }
   var colors = ds.colors || {};
   var colorKeys = Object.keys(colors);
