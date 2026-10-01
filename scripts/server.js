@@ -329,9 +329,20 @@ var server = http.createServer(function (req, res) {
 
 var APP_URL = 'http://localhost:' + opts.port + '/';
 
-function openApp() {
+function openWithDefault() {
   var opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
   childProcess.spawn(opener, [APP_URL], { stdio: 'ignore', detached: true }).unref();
+}
+
+// Chrome first on macOS: saving and the design-system download lean on
+// Chrome's file APIs. Falls back to the default browser when it isn't installed.
+function openApp() {
+  if (process.platform !== 'darwin') return openWithDefault();
+  var chrome = childProcess.spawn('open', ['-a', 'Google Chrome', APP_URL], { stdio: 'ignore' });
+  chrome.on('error', openWithDefault);
+  chrome.on('exit', function (code) {
+    if (code !== 0) openWithDefault();
+  });
 }
 
 ai.refreshPath();
