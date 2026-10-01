@@ -13,6 +13,8 @@ var os = require('os');
 var path = require('path');
 var apiDrain = require('./api-drain.js');
 
+var ROOT = path.resolve(__dirname, '../..');
+
 // A 64×64 solid red PNG: a vision check that costs a handful of tokens. A
 // model that answers "red" can see images; one that can't will say so or
 // guess, and a drain needs to know before it starts.
@@ -81,7 +83,7 @@ async function testConnection(config) {
   if (config.mode === 'agent') {
     var argv;
     try {
-      argv = agentDrain.splitCommand(config.agent.command);
+      argv = agentDrain.splitCommand(configModule.agentCommand(config));
     } catch (e) {
       return { ok: false, message: e.message };
     }
@@ -91,7 +93,7 @@ async function testConnection(config) {
     var output = [];
     try {
       var code = await agentDrain.runAgent(
-        config.agent.command,
+        configModule.agentCommand(config),
         'Reply with exactly two lines and nothing else: the word OK on the first line, ' +
           'then the exact name of the model you are running as on the second line. Do not run any tools.',
         { log: function (l) { output.push(l); }, timeoutMs: 180000 }
@@ -147,12 +149,44 @@ async function detect(options) {
   return { agents: agents, local: local, envKeys: envKeys };
 }
 
-// Lists a provider's models for the key being entered, with a suggested
-// default, so the collector picks from a list instead of typing a name.
+// Lists the models the collector can switch to: a provider's models for the
+// key being entered (or the saved one), or, in agent mode, the agent's own
+// list, with a suggested default, so the collector picks from a list instead
+// of typing a name.
 async function models(update) {
   var draft = configModule.mergeConfig(configModule.loadConfig(), update);
+  if (draft.mode === 'agent') return agentModels(configModule.findPreset(draft.agent.preset));
   var ids = await providers.listModels(draft.api);
   return { models: ids, suggested: configModule.pickModel(draft.api.provider, ids) };
+}
+
+// An agent's models: its own list command when it has one and it answers,
+// else the preset's shortcuts. `free` says a typed name is accepted too.
+async function agentModels(preset) {
+  var shortcuts = (preset.models || []).map(function (m) { return { id: m[0], label: m[1] }; });
+  var result = { models: shortcuts, suggested: '', free: Boolean(preset.modelFlag), supported: Boolean(preset.modelFlag) };
+  if (!preset.listModels) return result;
+  if (!pathRefreshed) refreshPath();
+  await pathRefreshed;
+  var argv = agentDrain.splitCommand(preset.listModels);
+  var listed = await new Promise(function (resolve) {
+    childProcess.execFile(argv[0], argv.slice(1), { cwd: ROOT, timeout: 30000, maxBuffer: 1e6 }, function (err, stdout) {
+      resolve(err ? [] : parseModelList(String(stdout)));
+    });
+  });
+  if (listed.length) result.models = listed;
+  return result;
+}
+
+// One model per line, the id first and an optional tab-separated label;
+// progress lines ("Fetching available models...") are skipped.
+function parseModelList(text) {
+  return text.split('\n').map(function (line) {
+    var parts = line.trim().split('\t');
+    var id = parts[0].trim();
+    if (!id || /\s/.test(id) || /\.\.\.$/.test(id)) return null;
+    return { id: id, label: (parts[1] || id).trim() };
+  }).filter(Boolean);
 }
 
 // Connect = apply the choice, prove it works, and only then save it as the
@@ -193,10 +227,10 @@ async function runDrain(config, options) {
   var problems = configModule.configProblems(config);
   if (problems.length) throw new Error(problems.join(' '));
   if (config.mode === 'agent') {
-    return agentDrain.runAgentDrain(Object.assign({ command: config.agent.command }, options));
+    return agentDrain.runAgentDrain(Object.assign({ command: configModule.agentCommand(config) }, options));
   }
   options.log('Draining with ' + configModule.findProvider(config.api.provider).label + ' · ' + config.api.model);
   return apiDrain.runApiDrain(Object.assign({ api: config.api }, options));
 }
 
-module.exports = { testConnection: testConnection, runDrain: runDrain, detect: detect, models: models, connect: connect, disconnect: disconnect, runTerminalAction: runTerminalAction, refreshPath: refreshPath, extractAgentModel: extractAgentModel };
+module.exports = { testConnection: testConnection, runDrain: runDrain, detect: detect, models: models, connect: connect, disconnect: disconnect, runTerminalAction: runTerminalAction, refreshPath: refreshPath, extractAgentModel: extractAgentModel, parseModelList: parseModelList };
