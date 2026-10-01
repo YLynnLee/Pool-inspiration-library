@@ -308,7 +308,7 @@
     if (link.status === 'added') {
       return el('a', { class: 'icon-btn proto-link-open', href: '#/', 'aria-label': 'Open ' + link.ref, title: 'Open in library', onclick: function () { stubToast('opens ' + link.ref); } }, [svg('forward')]);
     }
-    if (link.status === 'waiting' && !state.running) {
+    if ((link.status === 'waiting' && !state.running) || link.status === 'failed') {
       return el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Remove ' + splitUrl(link.url).host, title: 'Remove', onclick: function () { removeLink(link); } }, [icon('trash')]);
     }
     return null;
@@ -317,7 +317,6 @@
   function failureNotice(link) {
     return notice('error', link.reason, link.fix, [
       el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Retry', onclick: function () { link.status = 'waiting'; link.fails = false; render(); } }),
-      el('button', { class: 'btn btn-sm', type: 'button', text: 'Remove', onclick: function () { removeLink(link); } }),
     ]);
   }
 
