@@ -28,6 +28,29 @@ test('mergeConfig: choosing an agent preset fills its command; an edit overrides
   assert.equal(config.mergeConfig(next, { agent: { command: ' agy --model x -p ' } }).agent.command, 'agy --model x -p');
 });
 
+test('agentCommand adds the chosen model with the preset\'s flag; switching preset clears it', () => {
+  const claude = config.mergeConfig(config.DEFAULT_CONFIG, { agent: { model: ' sonnet ' } });
+  assert.equal(config.agentCommand(claude), 'claude --print --dangerously-skip-permissions --model sonnet');
+  assert.equal(config.agentCommand(config.DEFAULT_CONFIG), 'claude --print --dangerously-skip-permissions');
+  assert.equal(config.mergeConfig(claude, { agent: { preset: 'opencode' } }).agent.model, '');
+  assert.equal(config.mergeConfig(claude, { agent: { preset: 'claude' } }).agent.model, 'sonnet');
+});
+
+test('configProblems: an agent model must be a plain name, and a custom command takes none', () => {
+  assert.deepEqual(config.configProblems(config.mergeConfig(config.DEFAULT_CONFIG, { agent: { model: 'anthropic/claude-opus-5' } }), {}), []);
+  assert.match(config.configProblems(config.mergeConfig(config.DEFAULT_CONFIG, { agent: { model: '--print' } }), {}).join(' '), /model name/);
+  assert.match(config.configProblems(config.mergeConfig(config.DEFAULT_CONFIG, { agent: { model: 'a b' } }), {}).join(' '), /model name/);
+  const custom = config.mergeConfig(config.DEFAULT_CONFIG, { agent: { preset: 'custom', command: 'mytool' } });
+  assert.match(config.configProblems(config.mergeConfig(custom, { agent: { model: 'x' } }), {}).join(' '), /custom command/);
+});
+
+test('parseModelList reads one model per line, with an optional tab-separated label', () => {
+  assert.deepEqual(aiIndex.parseModelList('Fetching available models...\ngemini-3.1-pro-high\tGemini 3.1 Pro (High)\nopencode/big-pickle\n\n'), [
+    { id: 'gemini-3.1-pro-high', label: 'Gemini 3.1 Pro (High)' },
+    { id: 'opencode/big-pickle', label: 'opencode/big-pickle' },
+  ]);
+});
+
 test('publicConfig never exposes a key, only where it comes from', () => {
   const saved = config.mergeConfig(config.DEFAULT_CONFIG, { api: { apiKey: 'sk-ant-abcd1234' } });
   const shown = JSON.stringify(config.publicConfig(saved, {}));
