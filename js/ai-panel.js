@@ -903,4 +903,12 @@
     window.history.replaceState(null, '', window.location.pathname + window.location.hash);
     openConnect();
   });
+
+  // Opened as a file while Pool is running: move to the helper's copy, which
+  // saves straight into this folder instead of asking for it with a picker.
+  if (!served) {
+    helperUp().then(function (up) {
+      if (up) window.location.replace(HELPER_URL + window.location.hash);
+    });
+  }
 })();
