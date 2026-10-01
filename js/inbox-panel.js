@@ -1,7 +1,9 @@
-// The inbox drawer: the one place captures go in and get drained. Adding a
-// link, seeing what's waiting, taking one back out, and draining them all
-// live here, so the whole capture → drain loop reads as one list rather than
-// an Add dialog in one corner and a Drain count in another.
+// The Add drawer: the one place links go in and get analysed. Adding a
+// link, seeing what's waiting, taking one back out, and analysing them all
+// live here, so the whole add → analyse loop reads as one list rather than
+// an Add dialog in one corner and a count in another. (The collector never
+// sees the words "inbox" or "drain"; the code keeps them for the file and
+// the procedure behind it.)
 //
 // Writes only ever happen in direct response to the collector (Add, Remove,
 // Drain) — never on load, never on a timer. See
@@ -27,15 +29,15 @@
     button.classList.toggle('is-busy', drain.running);
     if (drain.running) {
       button.appendChild(el('span', { class: 'spinner', 'aria-hidden': 'true' }));
-      button.appendChild(el('span', { text: drain.total ? 'Draining ' + drain.step + '/' + drain.total : 'Draining…' }));
-      button.title = 'Show drain progress';
+      button.appendChild(el('span', { text: drain.total ? 'Analysing ' + drain.step + ' of ' + drain.total : 'Analysing…' }));
+      button.title = 'Show progress';
       return;
     }
-    button.appendChild(icon('inbox'));
-    button.appendChild(el('span', { text: 'Inbox' }));
+    button.appendChild(icon('plus'));
+    button.appendChild(el('span', { text: 'Add reference' }));
     var count = status && status.inbox ? status.inbox.captures : 0;
     if (count) button.appendChild(el('span', { class: 'count-badge', text: String(count) }));
-    button.title = count ? UI.plural(count, 'capture') + ' waiting — add links and drain them (I)' : 'Add a link to the inbox (I)';
+    button.title = count ? UI.plural(count, 'link') + ' waiting (I)' : 'Add a reference (I)';
   }
 
   function refreshButtons() {
@@ -43,7 +45,7 @@
   }
 
   window.buildInboxButton = function () {
-    var button = el('button', { class: 'btn btn-ghost inbox-btn', type: 'button', onclick: function () { openInbox(); } });
+    var button = el('button', { class: 'btn btn-secondary inbox-btn', type: 'button', onclick: function () { openInbox(); } });
     fillButton(button);
     return button;
   };
@@ -108,11 +110,12 @@
       },
     });
     var addBtn = el('button', { class: 'btn btn-primary', type: 'submit', text: 'Add' });
-    var feedback = el('p', { class: 'inbox-feedback', 'aria-live': 'polite' });
+    var feedback = el('div', { class: 'notice-slot' });
     var form = el('form', { class: 'inbox-add', novalidate: true }, [
       el('div', { class: 'inbox-add-row' }, [input, addBtn]),
       note,
-      el('div', { class: 'inbox-add-meta' }, [noteToggle, feedback]),
+      el('div', { class: 'inbox-add-meta' }, [noteToggle]),
+      feedback,
     ]);
     form.addEventListener('submit', function (evt) {
       evt.preventDefault();
@@ -121,14 +124,13 @@
 
     var list = el('div', { class: 'inbox-list' });
     var footer = el('div', { class: 'drawer-footer' });
-    var close = el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close inbox', onclick: closeInbox }, [icon('close')]);
+    var close = el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: closeInbox }, [icon('close')]);
     var countLabel = el('span', { class: 'drawer-count' });
 
     var panel = el('aside', { class: 'drawer', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'inbox-title' }, [
       el('header', { class: 'drawer-header' }, [
         el('div', {}, [
-          el('h2', { class: 'drawer-title', id: 'inbox-title' }, ['Inbox ', countLabel]),
-          el('p', { class: 'drawer-sub', text: 'Links waiting to be analysed and added to your library.' }),
+          el('h2', { class: 'drawer-title', id: 'inbox-title' }, ['Add references ', countLabel]),
         ]),
         close,
       ]),
@@ -162,9 +164,9 @@
     if (AI.served) AI.refresh();
   }
 
-  function setFeedback(text, tone) {
-    drawer.feedback.textContent = text || '';
-    drawer.feedback.className = 'inbox-feedback' + (tone ? ' is-' + tone : '');
+  // Report into the form's notice slot: what happened, and how to fix it.
+  function setFeedback(tone, title, text) {
+    UI.setNotice(drawer.feedback, tone, { title: title, text: text });
   }
 
   // ---- adding ---------------------------------------------------------------------
@@ -188,7 +190,7 @@
     var d = drawer;
     var parsed = window.parseCaptureInput(d.input.value);
     if (!parsed.urls.length) {
-      setFeedback(parsed.rejected.length ? 'That doesn’t look like a link — try https://…' : 'Paste a link first.', 'error');
+      setFeedback('error', parsed.rejected.length ? 'That isn’t a link' : 'Nothing to add', parsed.rejected.length ? 'Paste an address that starts with https://' : 'Paste a link first.');
       d.input.focus();
       return;
     }
@@ -208,7 +210,7 @@
     var added = 0;
     d.addBtn.disabled = true;
     d.addBtn.textContent = 'Adding…';
-    setFeedback('');
+    setFeedback(null);
 
     var chain = Promise.resolve();
     toAdd.forEach(function (url) {
@@ -228,7 +230,7 @@
         else if (inLibrary.length > 1) parts.push(inLibrary.length + ' are already in your library.');
         if (alreadyWaiting) parts.push(alreadyWaiting === 1 ? 'One was already waiting.' : alreadyWaiting + ' were already waiting.');
         if (parsed.rejected.length) parts.push('Skipped: ' + parsed.rejected.join(', ') + '.');
-        setFeedback(parts.join(' '), added ? 'ok' : 'warn');
+        setFeedback(added ? 'success' : 'warning', parts[0] || 'Nothing added', parts.slice(1).join(' '));
         d.input.value = '';
         d.note.value = '';
         d.note.hidden = true;
@@ -237,7 +239,7 @@
       })
       .catch(function (err) {
         var msg = (err && err.message) || 'Could not save. Nothing was changed.';
-        setFeedback(added ? 'Added ' + added + ', then: ' + msg : msg, 'error');
+        setFeedback('error', added ? 'Added ' + added + ', then stopped' : 'Couldn’t add the link', msg);
       })
       .then(function () {
         if (!drawer) return;
@@ -264,19 +266,19 @@
     button.disabled = true;
     window.removeFromInbox(item.line).then(function () {
       AI.refresh();
-      UI.toast('Removed ' + splitUrl(item.url).host + ' from the inbox.', {
+      UI.toast('Removed ' + splitUrl(item.url).host + '.', {
         action: {
           label: 'Undo',
           run: function () {
             window.appendToInbox(item.url, item.note).then(AI.refresh, function (err) {
-              UI.toast(err.message, { tone: 'error' });
+              if (drawer) setFeedback('error', 'Couldn’t put ' + splitUrl(item.url).host + ' back', err.message);
             });
           },
         },
       });
     }, function (err) {
       button.disabled = false;
-      UI.toast(err.message, { tone: 'error' });
+      if (drawer) setFeedback('error', 'Couldn’t remove ' + splitUrl(item.url).host, err.message);
     });
   }
 
@@ -284,9 +286,9 @@
     var parts = splitUrl(item.url);
     var active = opts.draining && item.url === AI.drain.currentUrl;
     var tags = [];
-    if (active) tags.push(el('span', { class: 'inbox-tag is-active' }, [el('span', { class: 'spinner', 'aria-hidden': 'true' }), 'Analysing']));
-    if (item.duplicate) tags.push(el('span', { class: 'inbox-tag', title: 'Draining will just clear it from the inbox', text: 'Already in library' }));
-    if (/fetch failed:/.test(item.note || '')) tags.push(el('span', { class: 'inbox-tag is-warn', text: 'Last try failed' }));
+    if (active) tags.push(UI.status('analysing'));
+    if (item.duplicate) tags.push(el('span', { class: 'inbox-tag', title: 'Analysing will just clear it', text: 'Already in library' }));
+    if (/fetch failed:/.test(item.note || '')) tags.push(UI.status('failed'));
 
     var main = el('div', { class: 'inbox-item-main' }, [
       el('a', { class: 'inbox-item-url', href: item.url, target: '_blank', rel: 'noopener noreferrer', title: item.url }, [
@@ -301,8 +303,8 @@
       var remove = el('button', {
         class: 'icon-btn inbox-remove',
         type: 'button',
-        'aria-label': 'Remove ' + parts.host + ' from the inbox',
-        title: opts.draining ? 'Wait for the drain to finish' : 'Remove from inbox',
+        'aria-label': 'Remove ' + parts.host,
+        title: opts.draining ? 'Wait for analysing to finish' : 'Remove',
         disabled: opts.draining,
       }, [icon('close')]);
       remove.addEventListener('click', function () { removeItem(item, remove); });
@@ -323,20 +325,14 @@
           return buildItem(item, { removable: false });
         })));
       } else {
-        d.list.appendChild(el('div', { class: 'inbox-empty' }, [
-          el('p', { text: 'Links you add are saved to inbox.md in the library folder.' }),
-          el('p', { class: 'inbox-empty-hint', text: 'To see what’s waiting and drain it, open the library through its helper — “Connect AI” below starts it.' }),
-        ]));
+        d.list.appendChild(el('div', { class: 'inbox-empty' }, [el('p', { text: 'Nothing added yet.' })]));
       }
       return;
     }
     var items = status.inbox.items || [];
     d.countLabel.textContent = items.length ? String(items.length) : '';
     if (!items.length) {
-      d.list.appendChild(el('div', { class: 'inbox-empty' }, [
-        el('p', { text: 'Nothing waiting.' }),
-        el('p', { class: 'inbox-empty-hint', text: 'Paste a link above — or anywhere on the page — and it lands here, ready to drain.' }),
-      ]));
+      d.list.appendChild(el('div', { class: 'inbox-empty' }, [el('p', { text: 'Nothing added yet.' })]));
       return;
     }
     var draining = AI.drain.running;
@@ -344,7 +340,7 @@
       return buildItem(item, { removable: true, draining: draining });
     })));
     if (status.inbox.malformed) {
-      d.list.appendChild(el('p', { class: 'inbox-empty-hint', text: UI.plural(status.inbox.malformed, 'line') + ' in inbox.md couldn’t be read and will be left alone.' }));
+      d.list.appendChild(UI.notice('warning', { title: UI.plural(status.inbox.malformed, 'saved line') + ' couldn’t be read', text: 'It’s left alone.' }));
     }
   }
 
@@ -397,22 +393,24 @@
     var label = status && status.config.connection ? status.config.connection.label : '';
 
     if (drain.error && kind !== 'running') {
-      d.footer.appendChild(el('p', { class: 'drawer-error', text: drain.error }));
+      d.footer.appendChild(UI.notice('error', { title: 'Analysing stopped', text: drain.error }));
     }
 
     if (kind === 'no-helper') {
-      d.footer.appendChild(el('p', { class: 'drawer-footer-text', text: 'Draining happens in the library’s helper, which connects your AI.' }));
       d.footer.appendChild(el('button', { class: 'btn btn-primary btn-block', type: 'button', text: 'Connect AI', onclick: AI.openConnect }));
     } else if (kind === 'offline') {
-      d.footer.appendChild(el('p', { class: 'drawer-footer-text', text: 'Can’t reach the library helper. Is its window still open?' }));
-      d.footer.appendChild(el('button', { class: 'btn btn-ghost btn-block', type: 'button', text: 'Try again', onclick: AI.refresh }));
+      d.footer.appendChild(UI.notice('error', {
+        title: 'Can’t reach the library helper',
+        text: 'Check its window is still open.',
+        actions: [{ label: 'Try again', run: AI.refresh }],
+      }));
     } else if (kind === 'no-ai') {
-      d.footer.appendChild(el('p', { class: 'drawer-footer-text', text: status.inbox.captures ? 'Connect an AI to analyse these and add them to your library.' : 'Connect an AI so these can be analysed when you drain.' }));
+      d.footer.appendChild(UI.notice('info', { title: 'No AI connected', text: 'Connect one to analyse your links.' }));
       d.footer.appendChild(el('button', { class: 'btn btn-primary btn-block', type: 'button', text: 'Connect AI', onclick: AI.openConnect }));
     } else if (kind === 'empty') {
       d.footer.appendChild(el('p', { class: 'drawer-footer-text' }, [
         el('span', { class: 'ai-dot', 'aria-hidden': 'true' }),
-        ' ' + label + ' is ready to drain.',
+        ' ' + label + ' is ready.',
       ]));
     } else if (kind === 'ready') {
       var n = status.inbox.captures;
@@ -420,18 +418,18 @@
       d.footer.appendChild(el('button', {
         class: 'btn btn-primary btn-block',
         type: 'button',
-        text: 'Drain ' + UI.plural(n, 'capture'),
+        text: 'Analyse ' + UI.plural(n, 'link'),
         onclick: function (evt) {
           evt.currentTarget.disabled = true;
           AI.startDrain();
         },
       }));
-      d.footer.appendChild(el('p', { class: 'drawer-footer-meta', text: 'With ' + label + ' · a few minutes each · uses your plan or credit' + (dups ? ' · ' + dups + ' already in the library will just be cleared' : '') + '. You can stop any time; finished ones stay.' }));
+      d.footer.appendChild(el('p', { class: 'drawer-footer-meta', text: 'With ' + label + ' · uses your plan or credit' + (dups ? ' · ' + dups + ' already in the library will just be cleared' : '') }));
     } else if (kind === 'running') {
       var bar = el('div', { class: 'progress' }, [el('div', { class: 'progress-bar' })]);
       var title = el('p', { class: 'drain-title' });
       var line = el('p', { class: 'drain-line' });
-      var stop = el('button', { class: 'btn btn-ghost btn-sm', type: 'button' }, [icon('stop'), 'Stop']);
+      var stop = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, [icon('stop'), 'Stop']);
       stop.addEventListener('click', function () {
         stop.disabled = true;
         stop.lastChild.textContent = 'Stopping…';
@@ -448,16 +446,13 @@
       d.footer.appendChild(log);
       updateRunning(d.live);
     } else if (kind === 'finished') {
-      d.footer.appendChild(el('div', { class: 'drain-result' + (drain.ok ? '' : ' is-warn') }, [
-        icon(drain.ok ? 'check' : 'close'),
-        el('p', { class: 'drain-title', text: drain.ok ? 'Drain finished' : 'Drain finished with problems' }),
-      ]));
+      d.footer.appendChild(UI.notice(drain.ok ? 'success' : 'warning', { title: drain.ok ? 'Analysis finished' : 'Analysis finished with problems' }));
       var summary = summaryLines(drain.lines);
       if (summary.length) d.footer.appendChild(el('ul', { class: 'drain-summary' }, summary.map(function (s) { return el('li', { text: s }); })));
       d.footer.appendChild(buildLog());
       d.footer.appendChild(el('div', { class: 'drawer-footer-actions' }, [
         el('button', {
-          class: 'btn btn-ghost',
+          class: 'btn btn-secondary',
           type: 'button',
           text: 'Dismiss',
           onclick: function () {
@@ -486,7 +481,7 @@
     } else {
       live.bar.classList.add('is-indeterminate');
       live.bar.firstChild.style.width = '';
-      live.title.textContent = 'Draining…';
+      live.title.textContent = 'Analysing…';
     }
     live.line.textContent = lastUsefulLine(drain.lines) || 'Starting…';
     var pre = live.log;
@@ -520,8 +515,8 @@
   });
 
   // ---- page-wide shortcuts ---------------------------------------------------------
-  // Paste a link anywhere (outside a text field) and it opens the inbox with
-  // the link ready to add. "I" opens the inbox.
+  // Paste a link anywhere (outside a text field) and it opens the drawer with
+  // the link ready to add. "I" opens the drawer.
 
   document.addEventListener('paste', function (evt) {
     if (UI.isTyping(evt.target) || document.querySelector('.add-modal-overlay')) return;

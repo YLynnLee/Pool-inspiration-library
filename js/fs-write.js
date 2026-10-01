@@ -165,7 +165,7 @@
       .catch(function () {
         return forgetProjectDir().then(function () {
           throw new Error(
-            'Could not find inbox.md in the selected folder. Pick the Pool project folder and try again.'
+            'Could not find Pool’s files in the selected folder. Pick the Pool project folder and try again.'
           );
         });
       })
@@ -212,7 +212,7 @@
   // inbox.md; from file:// there is nothing that shows the inbox to remove from.
   function removeFromInbox(line) {
     return viaHelper('inbox-remove', { line: line }).then(function (done) {
-      if (!done) throw new Error('Start the library helper to manage the inbox.');
+      if (!done) throw new Error('Start the library helper to remove links.');
     });
   }
 

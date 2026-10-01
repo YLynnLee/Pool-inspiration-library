@@ -584,34 +584,29 @@
   function buildEmptyState(filters, libraryTotal) {
     var hasFilters = !!(filters.query || filters.category || filters.keyword);
     var title;
-    var hint = '';
     var action = null;
     if (hasFilters) {
       title = filters.query ? 'Nothing matches “' + filters.query + '”.' : 'Nothing matches these filters.';
-      hint = 'Try fewer words, or remove a filter above.';
       action = el('button', {
-        class: 'btn btn-ghost',
+        class: 'btn btn-secondary',
         type: 'button',
         text: 'Clear filters',
         onclick: function () { setFilters(Object.assign({}, NO_FILTERS, { show: filters.show }), true); },
       });
     } else if (filters.show === 'drafts') {
       title = 'No drafts.';
-      hint = 'Every capture came through cleanly.';
-      action = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Back to all', onclick: function () { setFilters(NO_FILTERS, true); } });
+      action = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Back to all', onclick: function () { setFilters(NO_FILTERS, true); } });
     } else if (filters.show === 'hidden') {
       title = 'Nothing hidden.';
-      action = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Back to all', onclick: function () { setFilters(NO_FILTERS, true); } });
+      action = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Back to all', onclick: function () { setFilters(NO_FILTERS, true); } });
     } else if (!libraryTotal) {
       title = 'Your library is empty.';
-      hint = 'Paste a link anywhere on this page to add it to the inbox, then drain it.';
-      action = el('button', { class: 'btn btn-primary', type: 'button', text: 'Open inbox', onclick: function () { if (window.openInbox) window.openInbox(); } });
+      action = el('button', { class: 'btn btn-primary', type: 'button', text: 'Add a reference', onclick: function () { if (window.openInbox) window.openInbox(); } });
     } else {
       title = 'No references to show.';
     }
     return el('div', { class: 'empty-state' }, [
       el('p', { class: 'empty-title', text: title }),
-      hint ? el('p', { class: 'empty-hint', text: hint }) : null,
       action,
     ]);
   }
@@ -651,7 +646,7 @@
 
     function action(label, className, title, handler) {
       return el('button', {
-        class: 'tile-action ' + className,
+        class: 'btn btn-secondary btn-sm ' + className,
         type: 'button',
         title: title,
         onclick: function (evt) {
@@ -666,12 +661,12 @@
       // A hidden reference's two ways out, side by side and labelled,
       // instead of one ambiguous icon.
       tile.appendChild(el('div', { class: 'tile-actions' }, [
-        action('Restore', 'is-restore', 'Show this reference in the library again', function () {
+        action('Restore', '', 'Show this reference in the library again', function () {
           restoreEntry(entry.id);
           refreshGrid();
           UI.toast('Restored ' + entry.name + '.');
         }),
-        action('Delete…', 'is-delete', 'Delete this reference for good', function () {
+        action('Delete…', 'btn-danger-quiet', 'Delete this reference for good', function () {
           openPurgeModal(entry);
         }),
       ]));
@@ -680,14 +675,14 @@
 
     if (isDraft) {
       tile.appendChild(el('div', { class: 'tile-actions' }, [
-        action('Resolve…', 'is-resolve', 'Assign a category to this draft', function () {
+        action('Resolve…', '', 'Assign a category to this draft', function () {
           openResolveModal(entry);
         }),
       ]));
     }
 
     tile.appendChild(el('button', {
-      class: 'tile-hide-btn',
+      class: 'icon-btn tile-hide-btn',
       type: 'button',
       title: 'Delete this reference',
       'aria-label': 'Delete ' + entry.name,
@@ -708,7 +703,7 @@
     var root = el('div', { class: 'view view-entry' });
 
     root.appendChild(
-      el('a', { class: 'back-link', href: '#/', text: '‹ All references' })
+      el('a', { class: 'back-link', href: '#/' }, [icon('back'), 'Library'])
     );
 
     if (!entry) {
@@ -726,14 +721,15 @@
 
     if (window.isDraft(entry)) {
       root.appendChild(
-        el('div', { class: 'detail-draft-notice' }, [
-          el('span', { class: 'draft-badge', text: 'Draft' }),
-          entry.draftReason ? el('span', { class: 'draft-reason', text: entry.draftReason }) : null,
-        ])
+        UI.notice('warning', {
+          title: 'Draft',
+          text: entry.draftReason || 'The site could not be captured usefully.',
+          actions: [{ label: 'Resolve…', run: function () { openResolveModal(entry); } }],
+        })
       );
     }
 
-    // 1. hero screenshot
+    // 1. screenshots: hero plus extra thumbnails, lightbox as ever
     var heroWrap = el('div', { class: 'hero-wrap' });
     var hero = el('img', {
       class: 'hero-image',
@@ -758,46 +754,53 @@
       root.appendChild(extra);
     }
 
-    // 2. name -> sourceUrl
-    var titleRow = el('div', { class: 'entry-title-row' });
+    // 2. caption block: the name and its category on the left, the two
+    // actions on the right. Nothing here navigates except the actions.
+    var actions = el('div', { class: 'entry-actions' });
     // http(s) only: a javascript: sourceUrl would run in the helper's trusted origin.
     if (/^https?:\/\//i.test(entry.sourceUrl || '')) {
-      titleRow.appendChild(
+      actions.appendChild(
         el('a', {
-          class: 'entry-name entry-name-link',
+          class: 'btn btn-secondary btn-sm',
           href: entry.sourceUrl,
           target: '_blank',
           rel: 'noopener noreferrer',
-          text: entry.name,
-        })
+        }, ['Visit site', icon('external')])
       );
-    } else {
-      titleRow.appendChild(el('span', { class: 'entry-name', text: entry.name }));
     }
-    root.appendChild(titleRow);
+    actions.appendChild(
+      el('button', {
+        class: 'btn btn-danger-quiet btn-sm',
+        type: 'button',
+        text: 'Delete…',
+        onclick: function () { openPurgeModal(entry); },
+      })
+    );
+    root.appendChild(el('div', { class: 'entry-caption' }, [
+      el('div', {}, [
+        el('h1', { class: 'entry-name', text: entry.name }),
+        category
+          ? el('p', { class: 'entry-category-line' }, [
+              el('strong', { text: category.name }),
+              category.definition ? ' — ' + category.definition : '',
+            ])
+          : null,
+      ]),
+      actions,
+    ]));
 
-    // 3. category badge + one-line definition, expandable to the full essay
-    if (category) {
-      root.appendChild(buildCategorySection(category));
-    }
-
-    // 4. summary
-    root.appendChild(el('p', { class: 'entry-summary', text: entry.summary }));
-
-    // 5. keyword chips
-    var chipRow = el('div', { class: 'chip-row' });
-    (entry.keywords || []).forEach(function (kw) {
-      chipRow.appendChild(
-        el('a', {
-          class: 'chip',
-          href: buildGridHash({ query: '', category: '', keyword: kw }),
-          text: kw,
-        })
-      );
-    });
-    root.appendChild(el('section', { class: 'entry-section' }, [
-      el('h2', { class: 'section-label', text: 'Keywords' }),
-      chipRow,
+    // 3. summary and keywords, under the same labels as Breakdown
+    root.appendChild(el('div', { class: 'entry-facts' }, [
+      el('section', {}, [
+        el('h2', { class: 'section-label', text: 'Summary' }),
+        el('p', { class: 'type-notes', text: entry.summary }),
+      ]),
+      el('section', {}, [
+        el('h2', { class: 'section-label', text: 'Keywords' }),
+        el('ul', { class: 'keyword-list' }, (entry.keywords || []).map(function (kw) {
+          return el('li', { text: kw });
+        })),
+      ]),
     ]));
 
     // 6. everything past the header is tabbed: the design
@@ -963,6 +966,18 @@
   // filter blanks rather than every builder needing its own presence check
   // — an omitted section renders as nothing, never an empty panel.
 
+  // Collapsed by default: the detail is there if wanted, out of the way if not.
+  // A design system extracted before the split has no notes and gets no section.
+  function buildMeasurementNotes(notes) {
+    if (!notes) return null;
+    return el('section', { class: 'entry-section' }, [
+      el('details', { class: 'measurement-notes' }, [
+        el('summary', { text: 'How this was measured' }),
+        el('p', { class: 'type-notes', text: notes }),
+      ]),
+    ]);
+  }
+
   function buildDesignSystemSections(ds) {
     var frag = document.createDocumentFragment();
     if (ds.description) {
@@ -978,6 +993,7 @@
       buildDesignElevationPanel(ds.sections),
       buildDesignDosDontsPanel(ds.sections && ds.sections.dosAndDonts),
       buildDesignOmittedPanel(ds.omitted),
+      buildMeasurementNotes(ds.measurementNotes),
     ].forEach(function (panel) {
       if (panel) frag.appendChild(panel);
     });
@@ -1009,7 +1025,7 @@
     var filename = ds.referenceId + '-DESIGN.md';
     var actions = el('div', { class: 'design-download-actions' });
 
-    var downloadBtn = el('button', { class: 'copy-btn', type: 'button', text: 'Download .md' });
+    var downloadBtn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: 'Download .md' });
     downloadBtn.addEventListener('click', function () {
       var text = window.serializeDesignMd(ds);
       if ('download' in document.createElement('a')) {
@@ -1033,7 +1049,7 @@
     });
     actions.appendChild(downloadBtn);
 
-    var copyBtn = el('button', { class: 'copy-btn', type: 'button', text: 'Copy .md' });
+    var copyBtn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: 'Copy .md' });
     copyBtn.addEventListener('click', function () {
       copyText(window.serializeDesignMd(ds), function (ok) {
         flashCopied(copyBtn, ok ? 'Copied!' : 'Copy failed');
@@ -1247,21 +1263,6 @@
     ]);
   }
 
-  function buildCategorySection(category) {
-    var wrap = el('div', { class: 'category-section' });
-    var row = el('div', { class: 'category-badge-row' }, [
-      el('a', {
-        class: 'category-badge',
-        href: buildGridHash({ query: '', category: category.id, keyword: '' }),
-        text: category.name,
-      }),
-      el('span', { class: 'category-definition', text: category.definition }),
-    ]);
-    wrap.appendChild(row);
-
-    return wrap;
-  }
-
   // Shared by every entry-section whose h2 sits opposite one action element
   // (a single copy button, or a row of several) — buildPromptBlock below and
   // buildDesignMdPanel in the design-system panels.
@@ -1273,7 +1274,7 @@
   }
 
   function buildPromptBlock(label, text) {
-    var copyBtn = el('button', { class: 'copy-btn', type: 'button', text: 'Copy' });
+    var copyBtn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: 'Copy' });
     copyBtn.addEventListener('click', function () {
       copyText(text, function (ok) {
         flashCopied(copyBtn, ok ? 'Copied!' : 'Copy failed');
@@ -1332,10 +1333,9 @@
     );
     var imagePaths = window.computeImagePurge(purge.removed, purge.remaining);
 
-    var status = el('p', { class: 'add-modal-status', 'aria-live': 'polite' });
-    function setStatus(text, isError) {
-      status.textContent = text;
-      status.classList.toggle('is-error', !!isError);
+    var status = el('div', { class: 'notice-slot' });
+    function setError(title, text) {
+      UI.setNotice(status, title ? 'error' : null, { title: title, text: text });
     }
 
     var list = el('ul', { class: 'purge-modal-list' });
@@ -1346,7 +1346,7 @@
     });
 
     var cancelBtn = el('button', {
-      class: 'add-modal-cancel',
+      class: 'btn btn-secondary',
       type: 'button',
       text: 'Cancel',
       onclick: closePurgeModal,
@@ -1357,7 +1357,7 @@
     confirmBtn.addEventListener('click', function () {
       confirmBtn.disabled = true;
       confirmBtn.textContent = 'Purging…';
-      setStatus('', false);
+      setError(null);
 
       // The library write below is the one irreversible-in-view step: once
       // it succeeds the entry is gone from the grid no matter what happens
@@ -1409,7 +1409,7 @@
             savePendingPurge({ id: target.id, name: target.name, imagePaths: imagePaths });
             refreshGrid();
           }
-          setStatus((err && err.message) || 'Could not purge. Nothing was changed.', true);
+          setError('Couldn’t delete ' + target.name, (err && err.message) || 'Nothing was changed. Try again.');
           confirmBtn.disabled = false;
           confirmBtn.textContent = confirmLabel;
         });
@@ -1424,7 +1424,7 @@
         imagePaths.length ? el('li', { text: UI.plural(imagePaths.length, 'screenshot file') }) : null,
       ]),
       list,
-      el('p', { class: 'purge-modal-note', text: 'It can only be brought back from git, if it was committed.' }),
+      UI.notice('warning', { title: 'This can’t be undone', text: 'It can only be brought back from git, if it was committed.' }),
       status,
       el('div', { class: 'add-modal-actions' }, [cancelBtn, confirmBtn]),
     ]);
@@ -1460,13 +1460,12 @@
     var categories = window.getCategories();
     var selectedId = null;
 
-    var status = el('p', { class: 'add-modal-status', 'aria-live': 'polite' });
-    function setStatus(text, isError) {
-      status.textContent = text;
-      status.classList.toggle('is-error', !!isError);
+    var status = el('div', { class: 'notice-slot' });
+    function setError(title, text) {
+      UI.setNotice(status, title ? 'error' : null, { title: title, text: text });
     }
 
-    var confirmBtn = el('button', { class: 'add-modal-save', type: 'button', text: 'Resolve' });
+    var confirmBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Resolve' });
     confirmBtn.disabled = true;
 
     var list = el('div', { class: 'resolve-modal-list', role: 'radiogroup', 'aria-label': 'Category' });
@@ -1496,7 +1495,7 @@
       if (!selectedId) return;
       confirmBtn.disabled = true;
       confirmBtn.textContent = 'Resolving…';
-      setStatus('', false);
+      setError(null);
 
       var updated = window.resolveDraft(window.getEntries(), entry.id, selectedId);
 
@@ -1508,14 +1507,14 @@
           refreshGrid();
         })
         .catch(function (err) {
-          setStatus((err && err.message) || 'Could not resolve. Nothing was changed.', true);
+          setError('Couldn’t resolve ' + entry.name, (err && err.message) || 'Nothing was changed. Try again.');
           confirmBtn.disabled = false;
           confirmBtn.textContent = 'Resolve';
         });
     });
 
     var cancelBtn = el('button', {
-      class: 'add-modal-cancel',
+      class: 'btn btn-secondary',
       type: 'button',
       text: 'Close',
       onclick: closeResolveModal,
@@ -1523,24 +1522,11 @@
 
     var modalChildren = [
       el('h2', { class: 'add-modal-title', text: 'Resolve draft' }),
-      el('p', { class: 'resolve-modal-copy' }, [
-        document.createTextNode(entry.name + (entry.draftReason ? ' — ' + entry.draftReason : '')),
-      ]),
+      UI.notice('warning', {
+        title: entry.name + (entry.draftReason ? ' — ' + entry.draftReason : ' couldn’t be captured usefully'),
+        text: 'A category won’t fix the screenshot. Re-capture the site by hand and replace its screenshot.',
+      }),
     ];
-    modalChildren.push(
-      el('p', { class: 'resolve-modal-copy' }, [
-        document.createTextNode(
-          'This draft is here because its site could not be captured usefully, not because it ' +
-            'lacks a category — a drain always assigns one. ' +
-            (categories.length > 0
-              ? "Re-picking a category below won't fix the screenshot; "
-              : "Picking a category here won't fix the screenshot, and there are no categories " +
-                'to pick from yet anyway; ') +
-            "the real fix is re-capturing the site by hand and replacing this entry's " +
-            "screenshot yourself. Close this if you're not ready to do that."
-        ),
-      ])
-    );
     if (categories.length > 0) {
       modalChildren.push(list);
     }

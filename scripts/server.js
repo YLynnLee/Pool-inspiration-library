@@ -190,12 +190,12 @@ async function handleFiles(req, res, pathname) {
     return send(res, 200, { ok: true });
   }
   if (pathname === '/api/files/inbox-remove') {
-    if (typeof body.line !== 'string' || !body.line.trim()) return send(res, 400, { error: 'Which capture? A line is required.' });
-    if (job && job.running) return send(res, 409, { error: 'Wait for the drain to finish before removing captures.' });
+    if (typeof body.line !== 'string' || !body.line.trim()) return send(res, 400, { error: 'Which link? A line is required.' });
+    if (job && job.running) return send(res, 409, { error: 'Wait for analysing to finish before removing links.' });
     var inboxPath = path.join(ROOT, 'inbox.md');
     var current = fs.existsSync(inboxPath) ? fs.readFileSync(inboxPath, 'utf8') : '';
     var next = curation.removeCaptureLine(current, body.line);
-    if (next === current) return send(res, 410, { error: 'That capture is no longer in the inbox.' });
+    if (next === current) return send(res, 410, { error: 'That link is no longer waiting.' });
     writeAtomic('inbox.md', next);
     return send(res, 200, { ok: true });
   }
@@ -257,7 +257,7 @@ async function handleApi(req, res, pathname) {
   }
 
   if (req.method === 'POST' && pathname === '/api/drain') {
-    if (job && job.running) return send(res, 409, { error: 'a drain is already running' });
+    if (job && job.running) return send(res, 409, { error: 'Analysing is already running.' });
     var body = await readBody(req);
     var config = configModule.loadConfig();
     if (!config.connection) return send(res, 400, { error: 'Connect an AI first.' });
@@ -271,7 +271,7 @@ async function handleApi(req, res, pathname) {
   }
 
   if (req.method === 'GET' && pathname === '/api/drain/events') {
-    if (!job) return send(res, 404, { error: 'no drain has run yet' });
+    if (!job) return send(res, 404, { error: 'Nothing has been analysed yet.' });
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
     job.lines.forEach(function (line) { res.write('event: line\ndata: ' + JSON.stringify(line) + '\n\n'); });
     if (!job.running) {

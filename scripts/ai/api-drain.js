@@ -75,7 +75,7 @@ function buildCaptureMessage(input) {
     type: 'text',
     text: [
       'Harvest digest (measured by scripts/harvest-design.js):',
-      input.harvest ? JSON.stringify(input.harvest) : '(harvest failed — declare everything inferred in designSystem.description)',
+      input.harvest ? JSON.stringify(input.harvest) : '(harvest failed — declare everything inferred in designSystem.measurementNotes)',
       '',
       'Existing categories — assign one of these ids if it genuinely fits, else supply newCategory + rejectedCategory:',
       JSON.stringify(input.categories.map(function (c) {
@@ -243,7 +243,7 @@ async function drainOne(item, ctx) {
           draftReason: result.reference.draftReason,
           newCategory: result.newCategory ? result.newCategory.id : null,
           rejectedCategory: result.rejectedCategory || null,
-          honesty: result.designSystem && result.designSystem.description,
+          honesty: result.designSystem && result.designSystem.measurementNotes,
         };
       }
       problems = (dry.stderr || dry.stdout).trim();

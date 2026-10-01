@@ -40,7 +40,7 @@ described in `CONTEXT.md`'s **Harvest** entry: colours ranked by painted area, f
 spacing histogram, the radius and shadow sets, container widths, and a `notes` array flagging
 anything the harvest itself couldn't see (a thin DOM, a canvas-dominated viewport, skipped
 cross-origin iframes). Record `notes` — they are the harvest's own account of its blind spots, and
-belong in `description:` verbatim or paraphrased (see **Declare honesty** below).
+belong in `measurementNotes:` verbatim or paraphrased (see **Declare honesty** below).
 
 ## Interpret
 
@@ -96,8 +96,12 @@ don't support it — that's what **Omit deliberately** below is for.
 
 ## Declare honesty
 
-One line in `description:` stating what was measured and what was inferred. This is
-non-negotiable: an inferred hex and a measured hex are typed identically in YAML, and six months
+`description:` is the **Character** of the design: one to three sentences about the style
+itself — what it looks and feels like — and nothing about how it was measured. It is the first
+thing a collector reads in Breakdown.
+
+Everything about process goes in `measurementNotes:`, which Breakdown shows collapsed under "How
+this was measured": what was measured and what was inferred. This is non-negotiable: an inferred hex and a measured hex are typed identically in YAML, and six months
 on nothing else records which is which. Where the harvest returned thin or degraded data (per its
 `notes`), say so here too — "measured from the harvest; the hero's canvas-rendered type is
 inferred from the screenshot, since a canvas paints nothing `getComputedStyle` can read."
@@ -140,7 +144,7 @@ in this order: category, then reference, then design system, then inbox line.
 ## A thin harvest still produces a file
 
 A page that is mostly WebGL, or blocks scripting, still gets a DESIGN.md written from the
-screenshots, with the shortfall named in `description:`. It is **never** parked as a `Draft` —
+screenshots, with the shortfall named in `measurementNotes:`. It is **never** parked as a `Draft` —
 that term means screenshot failure and nothing else.
 Extraction has no park state of its own: it either produces a file (usually a thinner one, with
 more of its values declared inferred) or it errors out at **Locate** because the reference or URL
@@ -149,4 +153,4 @@ doesn't exist yet.
 ## Reporting
 
 After a run, report for the reference: which values were measured (from the harvest) and which
-were inferred (declared in `description:`), and which sections were omitted and why.
+were inferred (declared in `measurementNotes:`), and which sections were omitted and why.
