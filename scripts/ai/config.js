@@ -23,16 +23,27 @@ var CONFIG_FILE = path.join(ROOT, '.drain.config.json');
 
 // Headless commands; the prompt is appended as the final argument. Flags
 // change between releases — the UI lets the collector edit the command.
+//
+// modelFlag: how the agent is told which model to use; the chosen model is
+// added at run time (agentCommand), so the command itself stays the preset's.
+// models: shortcuts offered in the app, [id, label]. listModels: a command
+// that prints the models this agent can use on this computer, one per line
+// (the id first, then an optional tab and label). An agent with neither
+// still takes a typed model name.
 var AGENT_PRESETS = [
-  { id: 'claude', label: 'Claude Code', command: 'claude --print --dangerously-skip-permissions' },
-  { id: 'codex', label: 'Codex CLI', command: 'codex exec --dangerously-bypass-approvals-and-sandbox' },
+  { id: 'claude', label: 'Claude Code', command: 'claude --print --dangerously-skip-permissions', modelFlag: '--model', models: [['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku'], ['fable', 'Fable']] },
+  { id: 'codex', label: 'Codex CLI', command: 'codex exec --dangerously-bypass-approvals-and-sandbox', modelFlag: '--model' },
   // agy's print mode gives up after 5 minutes by default; a drain takes longer.
-  { id: 'antigravity', label: 'Antigravity CLI', command: 'agy --dangerously-skip-permissions --print-timeout 60m -p' },
-  { id: 'opencode', label: 'OpenCode', command: 'opencode run' },
-  { id: 'pi', label: 'Pi', command: 'pi -p' },
-  { id: 'hermes', label: 'Hermes Agent', command: 'hermes chat --yolo -q' },
+  { id: 'antigravity', label: 'Antigravity CLI', command: 'agy --dangerously-skip-permissions --print-timeout 60m -p', modelFlag: '--model', listModels: 'agy models' },
+  { id: 'opencode', label: 'OpenCode', command: 'opencode run', modelFlag: '--model', listModels: 'opencode models' },
+  { id: 'pi', label: 'Pi', command: 'pi -p', modelFlag: '--model' },
+  { id: 'hermes', label: 'Hermes Agent', command: 'hermes chat --yolo -q', modelFlag: '--model' },
   { id: 'custom', label: 'Custom command', command: '' },
 ];
+
+// Model names are passed to the agent as one argument; anything outside
+// this set is refused rather than quoted, so a name can never become a flag.
+var AGENT_MODEL_NAME = /^[A-Za-z0-9][\w.:/@+-]*$/;
 
 // format: which wire protocol callModel speaks. keyEnv: the environment
 // variable used when no key is saved, so a collector who already exports
@@ -52,7 +63,7 @@ var API_PROVIDERS = [
 var DEFAULT_CONFIG = {
   connection: null,
   mode: 'agent',
-  agent: { preset: 'claude', command: AGENT_PRESETS[0].command },
+  agent: { preset: 'claude', command: AGENT_PRESETS[0].command, model: '' },
   api: { provider: 'anthropic', baseUrl: API_PROVIDERS[0].baseUrl, model: API_PROVIDERS[0].model, apiKey: '' },
 };
 
@@ -77,8 +88,10 @@ function mergeConfig(current, update) {
     if (update.agent.preset && update.agent.preset !== next.agent.preset) {
       next.agent.preset = findPreset(update.agent.preset).id;
       next.agent.command = findPreset(next.agent.preset).command;
+      next.agent.model = '';
     }
     if (typeof update.agent.command === 'string') next.agent.command = update.agent.command.trim();
+    if (typeof update.agent.model === 'string') next.agent.model = update.agent.model.trim();
   }
 
   if (update.api) {
@@ -145,7 +158,7 @@ function publicConfig(config, env) {
   return {
     connection: config.connection || null,
     mode: config.mode,
-    agent: { preset: config.agent.preset, command: config.agent.command },
+    agent: { preset: config.agent.preset, command: config.agent.command, model: config.agent.model || '' },
     api: {
       provider: api.provider,
       baseUrl: api.baseUrl,
@@ -164,6 +177,8 @@ function configProblems(config, env) {
   var problems = [];
   if (config.mode === 'agent') {
     if (!config.agent.command) problems.push('Enter the command that runs your agent headlessly.');
+    if (config.agent.model && !AGENT_MODEL_NAME.test(config.agent.model)) problems.push('“' + config.agent.model + '” doesn’t look like a model name.');
+    if (config.agent.model && !findPreset(config.agent.preset).modelFlag) problems.push('A custom command picks its own model — put it in the command instead.');
   } else {
     var provider = findProvider(config.api.provider);
     if (!config.api.baseUrl) problems.push('Enter the API base URL.');
@@ -185,6 +200,13 @@ function connectionLabel(config) {
   var provider = findProvider(config.api.provider);
   if (provider.id === 'custom') return config.api.model;
   return provider.label.replace(/ \(.*\)$/, '') + ' · ' + config.api.model;
+}
+
+// The command a drain actually runs: the preset's, plus the chosen model.
+function agentCommand(config) {
+  var model = config.agent.model;
+  var flag = findPreset(config.agent.preset).modelFlag;
+  return model && flag ? config.agent.command + ' ' + flag + ' ' + model : config.agent.command;
 }
 
 // Picks a sensible default from a provider's model list: the strongest
@@ -298,6 +320,7 @@ module.exports = {
   publicConfig: publicConfig,
   configProblems: configProblems,
   connectionLabel: connectionLabel,
+  agentCommand: agentCommand,
   pickModel: pickModel,
   loadConfig: loadConfig,
   saveConfig: saveConfig,
