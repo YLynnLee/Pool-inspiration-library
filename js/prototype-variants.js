@@ -20,7 +20,7 @@
 
   function param(key) {
     var v = new URLSearchParams(window.location.search).get(key);
-    return VARIANTS[key][v] ? v : 'A';
+    return VARIANTS[key][v] ? v : (key === 'detail' ? 'C' : 'A');
   }
 
   function setParam(key, value) {
@@ -53,8 +53,8 @@
     return el('div', { class: 'notice is-' + tone, role: tone === 'error' ? 'alert' : 'status' }, [
       glyph,
       el('p', { class: 'notice-title', text: title }),
-      actions && actions.length ? el('div', { class: 'notice-actions' }, actions) : null,
       text ? el('p', { class: 'notice-text', text: text }) : null,
+      actions && actions.length ? el('div', { class: 'notice-actions' }, actions) : null,
     ]);
   }
 
@@ -288,23 +288,22 @@
     return el('span', { class: 'status is-' + link.status }, [glyph, m[0]]);
   }
 
+  // The site's name first, the full link under it as secondary text.
   function linkMain(link) {
     var parts = splitUrl(link.url);
     return el('div', { class: 'proto-link-main' }, [
-      el('a', { class: 'proto-link-url', href: link.url, target: '_blank', rel: 'noopener noreferrer', title: link.url }, [
-        el('span', { class: 'proto-link-host', text: parts.host }),
-        el('span', { class: 'proto-link-path', text: parts.rest }),
-      ]),
+      el('p', { class: 'proto-link-host', text: parts.host }),
+      el('a', { class: 'proto-link-url', href: link.url, target: '_blank', rel: 'noopener noreferrer', title: link.url, text: link.url }),
       link.note ? el('p', { class: 'proto-link-note', text: link.note }) : null,
     ]);
   }
 
   function linkTrailing(link) {
     if (link.status === 'added') {
-      return el('a', { class: 'proto-link-open', href: '#/', onclick: function () { stubToast('opens ' + link.ref); } }, ['Open', svg('forward')]);
+      return el('a', { class: 'icon-btn proto-link-open', href: '#/', 'aria-label': 'Open ' + link.ref, title: 'Open in library', onclick: function () { stubToast('opens ' + link.ref); } }, [svg('forward')]);
     }
     if (link.status === 'waiting' && !state.running) {
-      return el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Remove ' + splitUrl(link.url).host, onclick: function () { removeLink(link); } }, [icon('close')]);
+      return el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Remove ' + splitUrl(link.url).host, title: 'Remove', onclick: function () { removeLink(link); } }, [icon('trash')]);
     }
     return null;
   }

@@ -6,7 +6,7 @@
 
 .notice {
   display: grid;
-  grid-template-columns: 16px 1fr auto;
+  grid-template-columns: 16px 1fr;
   gap: 4px 10px;
   align-items: start;
   padding: 12px 14px;
@@ -41,11 +41,11 @@
 }
 
 .notice-actions {
-  grid-column: 3;
-  grid-row: 1 / span 2;
+  grid-column: 2;
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  align-self: center;
+  margin-top: 8px;
 }
 
 .notice.is-success > .icon { color: var(--accent); }
@@ -62,10 +62,6 @@
 }
 .notice.is-error > .icon { color: var(--danger); }
 
-@media (max-width: 520px) {
-  .notice { grid-template-columns: 16px 1fr; }
-  .notice-actions { grid-column: 2; grid-row: auto; margin-top: 6px; }
-}
 
 /* ---- KEEP? status: a small labelled state, used per link and in the header ---- */
 
@@ -323,22 +319,24 @@ a.btn { text-decoration: none; }
 }
 
 .proto-link-host {
+  margin: 0;
   font-size: 14px;
+  font-weight: 500;
   color: var(--text);
-}
-
-.proto-link-path {
-  font-size: 13px;
-  color: var(--text-faint);
 }
 
 .proto-link-url {
   display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--text-faint);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-decoration: none;
 }
+
+.proto-link-url:hover { color: var(--text-dim); }
 
 .proto-link-note {
   margin: 2px 0 0;
@@ -346,14 +344,7 @@ a.btn { text-decoration: none; }
   color: var(--text-dim);
 }
 
-.proto-link-open {
-  font-size: 12.5px;
-  color: var(--text);
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.proto-link-open:hover { text-decoration: underline; text-underline-offset: 3px; }
+.proto-link-open { color: var(--text-dim); }
 
 .proto-group + .proto-group { margin-top: 24px; }
 .proto-group .section-label { margin: 16px 0 0; }
