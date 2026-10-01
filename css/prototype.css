@@ -1,0 +1,451 @@
+/* PROTOTYPE — throwaway, lives only on prototype/reference-page-and-add-flow.
+   Styles for js/prototype-variants.js. Components meant to survive (notice,
+   status, plain keyword labels) are marked KEEP? so folding them in is easy. */
+
+/* ---- KEEP? notice: the one way the app reports a problem or an outcome ---- */
+
+.notice {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  gap: 4px 10px;
+  align-items: start;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.notice > .icon {
+  grid-column: 1;
+  grid-row: 1;
+  margin-top: 2px;
+  color: var(--text-dim);
+}
+
+.notice-title,
+.notice-text {
+  grid-column: 2;
+}
+
+.notice-title {
+  margin: 0;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.notice-text {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.notice-actions {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  display: flex;
+  gap: 6px;
+  align-self: center;
+}
+
+.notice.is-success > .icon { color: var(--accent); }
+
+.notice.is-warning {
+  border-color: rgba(245, 166, 35, 0.35);
+  background: rgba(245, 166, 35, 0.06);
+}
+.notice.is-warning > .icon { color: var(--draft); }
+
+.notice.is-error {
+  border-color: rgba(255, 138, 138, 0.35);
+  background: rgba(255, 138, 138, 0.06);
+}
+.notice.is-error > .icon { color: var(--danger); }
+
+@media (max-width: 520px) {
+  .notice { grid-template-columns: 16px 1fr; }
+  .notice-actions { grid-column: 2; grid-row: auto; margin-top: 6px; }
+}
+
+/* ---- KEEP? status: a small labelled state, used per link and in the header ---- */
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status.is-analysing { color: var(--text); }
+.status.is-added { color: var(--accent); }
+.status.is-failed { color: var(--danger); }
+
+/* ---- header: one primary, one secondary ---- */
+
+.proto-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.proto-ai-btn .status-dot { color: var(--text-faint); }
+.proto-ai-btn.is-connected .status-dot { color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+
+.proto-add-btn .spinner { width: 12px; height: 12px; }
+
+.proto-add-btn .proto-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+/* ---- reference page: shared pieces ---- */
+
+.proto-entry .entry-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: 0.005em;
+  text-wrap: balance;
+}
+
+.proto-host {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.proto-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.proto-body {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--text);
+  max-width: 66ch;
+}
+
+.proto-body-dim { color: var(--text-dim); }
+
+.proto-category-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* KEEP? keywords as plain labels: no border, no hover, nothing to click */
+.keyword-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+.keyword-list li:not(:last-child)::after {
+  content: '·';
+  margin: 0 10px;
+  color: var(--text-faint);
+}
+
+a.btn { text-decoration: none; }
+
+.proto-entry .detail-tabs { margin-top: 56px; }
+.proto-entry .notice { margin-bottom: 24px; }
+
+/* A — header first, label column (mirrors Breakdown's Spacing & shape rows) */
+
+.proto-a-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px 24px;
+  flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+
+.proto-facts {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 28px 24px;
+  margin: 40px 0 0;
+}
+
+.proto-facts dt {
+  margin: 4px 0 0;
+}
+
+.proto-facts dd {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+@media (max-width: 640px) {
+  .proto-facts { grid-template-columns: 1fr; gap: 8px; }
+  .proto-facts dd { margin-bottom: 20px; }
+}
+
+/* B — split: sticky screenshots, info column */
+
+.view-entry.proto-wide { max-width: 1240px; }
+
+.proto-b-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 48px;
+  align-items: start;
+}
+
+.proto-b-shots {
+  position: sticky;
+  top: 24px;
+}
+
+.proto-b-info .proto-actions { margin-top: 20px; }
+
+.proto-stack {
+  display: grid;
+  gap: 32px;
+  margin-top: 36px;
+}
+
+.proto-stack .section-label { margin-bottom: 10px; }
+
+@media (max-width: 900px) {
+  .proto-b-split { grid-template-columns: 1fr; gap: 28px; }
+  .proto-b-shots { position: static; }
+}
+
+/* C — plate: screenshot first, caption block under it */
+
+.proto-c-caption {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px 32px;
+  padding: 24px 0 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.proto-c-caption .proto-category-line {
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--text-dim);
+  max-width: 66ch;
+}
+
+.proto-c-caption .proto-category-line strong {
+  color: var(--text);
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .proto-c-caption { grid-template-columns: 1fr; }
+}
+
+/* ---- Add drawer ---- */
+
+.proto-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 24px 24px;
+}
+
+.proto-add-form {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+}
+
+.proto-add-row {
+  display: flex;
+  gap: 8px;
+}
+
+.proto-add-row .field { flex: 1; }
+
+.proto-add-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.proto-link-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.proto-link {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+}
+
+.proto-link-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.proto-link-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.proto-link-host {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.proto-link-path {
+  font-size: 13px;
+  color: var(--text-faint);
+}
+
+.proto-link-url {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.proto-link-note {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.proto-link-open {
+  font-size: 12.5px;
+  color: var(--text);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.proto-link-open:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+.proto-group + .proto-group { margin-top: 24px; }
+.proto-group .section-label { margin: 16px 0 0; }
+
+/* C — progress track */
+
+.proto-track {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.proto-track-step {
+  display: grid;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.proto-track-step::before {
+  content: '';
+  height: 3px;
+  border-radius: 2px;
+  background: var(--bg-raised-2);
+}
+
+.proto-track-step.is-done { color: var(--text-dim); }
+.proto-track-step.is-done::before { background: var(--text-dim); }
+.proto-track-step.is-current { color: var(--text); }
+.proto-track-step.is-current::before {
+  background: linear-gradient(90deg, var(--accent) 0 40%, var(--bg-raised-2) 40%);
+  background-size: 250% 100%;
+  animation: proto-track 1.4s var(--ease) infinite;
+}
+.proto-track-step.is-failed { color: var(--danger); }
+.proto-track-step.is-failed::before { background: var(--danger); }
+
+@keyframes proto-track {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+
+.proto-footer {
+  padding: 16px 24px 24px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+}
+
+.proto-footer-meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+/* ---- prototype switcher (not part of the design being judged) ---- */
+
+.proto-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 999px;
+  background: #ffe14d;
+  color: #111;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  font: 500 12.5px/1 'Inter', sans-serif;
+  max-width: calc(100vw - 32px);
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  justify-content: center;
+}
+
+.proto-bar button {
+  border: 0;
+  background: rgba(0, 0, 0, 0.08);
+  color: #111;
+  border-radius: 999px;
+  padding: 7px 11px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.proto-bar button:hover { background: rgba(0, 0, 0, 0.16); }
+.proto-bar-label { padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 52vw; }
+.proto-bar-sep { width: 1px; height: 18px; background: rgba(0, 0, 0, 0.2); margin: 0 4px; }
