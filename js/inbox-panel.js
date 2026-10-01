@@ -6,8 +6,7 @@
 // the procedure behind it.)
 //
 // Writes only ever happen in direct response to the collector (Add, Remove,
-// Drain) — never on load, never on a timer. See
-// CONTRIBUTING.md.
+// Drain) — never on load, never on a timer. See CONTRIBUTING.md.
 (function () {
   'use strict';
 
@@ -16,9 +15,63 @@
   var icon = UI.icon;
   var AI = window.LibraryAI;
 
-  // Links added from file:// this session. That page can't read inbox.md,
-  // so this is the only list it can honestly show.
-  var addedHere = [];
+  // Links this page has seen, newest first ([{ url, note }]). A link leaves
+  // the helper's inbox once it is analysed, and a page that isn't served by
+  // the helper can't read the inbox at all — so this is what keeps every
+  // added link in the list. Kept for the browser session so a reload after a
+  // run still shows what was added.
+  var KNOWN_KEY = 'pool.addedLinks';
+  var known = loadKnown();
+  // Links sent back to Waiting this session; their old failure no longer counts.
+  var retried = [];
+
+  function loadKnown() {
+    try {
+      var list = JSON.parse(window.sessionStorage.getItem(KNOWN_KEY) || '[]');
+      return Array.isArray(list) ? list.filter(function (k) { return k && typeof k.url === 'string'; }) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveKnown() {
+    try {
+      window.sessionStorage.setItem(KNOWN_KEY, JSON.stringify(known));
+    } catch (e) {
+      // Private window or blocked storage: the list just won't survive a reload.
+    }
+  }
+
+  function knownIndex(url) {
+    for (var i = 0; i < known.length; i++) if (sameUrl(known[i].url, url)) return i;
+    return -1;
+  }
+
+  function remember(url, note) {
+    var at = knownIndex(url);
+    if (at !== -1) known.splice(at, 1);
+    known.unshift({ url: url, note: note || '' });
+    saveKnown();
+  }
+
+  function forget(url) {
+    var at = knownIndex(url);
+    if (at === -1) return;
+    known.splice(at, 1);
+    saveKnown();
+  }
+
+  // Anything waiting in the inbox is a link the page should keep showing.
+  function syncKnown(status) {
+    var changed = false;
+    ((status && status.inbox && status.inbox.items) || []).forEach(function (item) {
+      if (knownIndex(item.url) === -1) {
+        known.push({ url: item.url, note: item.note || '' });
+        changed = true;
+      }
+    });
+    if (changed) saveKnown();
+  }
 
   // ---- header button ------------------------------------------------------------
 
@@ -175,7 +228,7 @@
   // before adding, so "medium.com" should count as the waiting
   // "https://medium.com/".
   function sameUrl(a, b) {
-    return String(a).replace(/\/+$/, '') === String(b).replace(/\/+$/, '');
+    return window.LinkStatus.key(a) === window.LinkStatus.key(b);
   }
 
   function libraryEntryFor(url) {
@@ -195,7 +248,7 @@
       return;
     }
     var status = AI.status();
-    var waiting = status && status.inbox ? status.inbox.urls : addedHere.map(function (a) { return a.url; });
+    var waiting = status && status.inbox ? status.inbox.urls : known.map(function (k) { return k.url; });
     var toAdd = [];
     var inLibrary = [];
     var alreadyWaiting = 0;
@@ -217,7 +270,7 @@
       chain = chain.then(function () {
         return window.appendToInbox(url, noteText).then(function () {
           added++;
-          if (!AI.served || !AI.status()) addedHere.unshift({ url: url, note: noteText.trim() });
+          remember(url, noteText.trim());
         });
       });
     });
@@ -252,94 +305,138 @@
 
   // ---- the list -------------------------------------------------------------------
 
-  function splitUrl(url) {
-    try {
-      var u = new URL(url);
-      var rest = (u.pathname === '/' ? '' : u.pathname) + u.search;
-      return { host: u.host.replace(/^www\./, ''), rest: rest };
-    } catch (e) {
-      return { host: url, rest: '' };
-    }
+
+  // The helper's own record of a waiting link: its exact line is what Remove needs.
+  function inboxItemFor(url) {
+    var status = AI.status();
+    var items = (status && status.inbox && status.inbox.items) || [];
+    for (var i = 0; i < items.length; i++) if (sameUrl(items[i].url, url)) return items[i];
+    return null;
   }
 
-  function removeItem(item, button) {
+  function removeLink(link, button) {
+    var item = inboxItemFor(link.url);
+    if (!item) return;
     button.disabled = true;
     window.removeFromInbox(item.line).then(function () {
+      forget(link.url);
       AI.refresh();
-      UI.toast('Removed ' + splitUrl(item.url).host + '.', {
+      UI.toast('Removed ' + link.host + '.', {
         action: {
           label: 'Undo',
           run: function () {
-            window.appendToInbox(item.url, item.note).then(AI.refresh, function (err) {
-              if (drawer) setFeedback('error', 'Couldn’t put ' + splitUrl(item.url).host + ' back', err.message);
+            window.appendToInbox(link.url, link.note).then(function () {
+              remember(link.url, link.note);
+              AI.refresh();
+            }, function (err) {
+              if (drawer) setFeedback('error', 'Couldn’t put ' + link.host + ' back', err.message);
             });
           },
         },
       });
     }, function (err) {
       button.disabled = false;
-      if (drawer) setFeedback('error', 'Couldn’t remove ' + splitUrl(item.url).host, err.message);
+      if (drawer) setFeedback('error', 'Couldn’t remove ' + link.host, err.message);
     });
   }
 
-  function buildItem(item, opts) {
-    var parts = splitUrl(item.url);
-    var active = opts.draining && item.url === AI.drain.currentUrl;
-    var tags = [];
-    if (active) tags.push(UI.status('analysing'));
-    if (item.duplicate) tags.push(el('span', { class: 'inbox-tag', title: 'Analysing will just clear it', text: 'Already in library' }));
-    if (/fetch failed:/.test(item.note || '')) tags.push(UI.status('failed'));
+  // Retry puts the link back to Waiting: its line is rewritten without the
+  // failure the helper noted on it, so the next run starts clean.
+  function retryLink(link, button) {
+    var item = inboxItemFor(link.url);
+    button.disabled = true;
+    var rewrite = item ? window.removeFromInbox(item.line).then(function () {
+      // If the clean line can't be written, put the original back rather than lose the link.
+      return window.appendToInbox(link.url, link.note).catch(function (err) {
+        return window.appendToInbox(item.url, item.note).then(function () { throw err; });
+      });
+    }) : Promise.resolve();
+    rewrite.then(function () {
+      if (retried.indexOf(link.url) === -1) retried.push(link.url);
+      remember(link.url, link.note);
+      if (AI.served) AI.refresh();
+      else renderDrawer();
+    }, function (err) {
+      button.disabled = false;
+      if (drawer) setFeedback('error', 'Couldn’t retry ' + link.host, err.message);
+    });
+  }
 
-    var main = el('div', { class: 'inbox-item-main' }, [
-      el('a', { class: 'inbox-item-url', href: item.url, target: '_blank', rel: 'noopener noreferrer', title: item.url }, [
-        el('span', { class: 'inbox-host', text: parts.host }),
-        el('span', { class: 'inbox-path', text: parts.rest }),
-      ]),
-      item.note ? el('p', { class: 'inbox-item-note', text: item.note }) : null,
-      tags.length ? el('div', { class: 'inbox-tags' }, tags) : null,
-    ]);
-    var row = el('li', { class: 'inbox-item' + (active ? ' is-active' : '') }, [main]);
-    if (opts.removable) {
+  function trailingControl(link, busy) {
+    if (link.status === 'added') {
+      var open = el('a', {
+        class: 'icon-btn',
+        href: link.reference ? '#/entry/' + encodeURIComponent(link.reference.id) : '#/',
+        'aria-label': link.reference ? 'Open ' + link.reference.name : 'Open in the library',
+        title: 'Open in library',
+      }, [icon('forward')]);
+      open.addEventListener('click', function () {
+        closeInbox();
+        // The page loaded before this run, so it has to reload to know the new reference.
+        if (!link.reference) window.setTimeout(function () { window.location.reload(); }, 0);
+      });
+      return open;
+    }
+    if ((link.status === 'waiting' || link.status === 'failed') && AI.served && inboxItemFor(link.url)) {
       var remove = el('button', {
-        class: 'icon-btn inbox-remove',
+        class: 'icon-btn',
         type: 'button',
-        'aria-label': 'Remove ' + parts.host,
-        title: opts.draining ? 'Wait for analysing to finish' : 'Remove',
-        disabled: opts.draining,
-      }, [icon('close')]);
-      remove.addEventListener('click', function () { removeItem(item, remove); });
-      row.appendChild(remove);
+        'aria-label': 'Remove ' + link.host,
+        title: busy ? 'Wait for analysing to finish' : 'Remove',
+        disabled: busy,
+      }, [icon('trash')]);
+      remove.addEventListener('click', function () { removeLink(link, remove); });
+      return remove;
+    }
+    return null;
+  }
+
+  function buildLinkRow(link, busy) {
+    var main = el('div', { class: 'link-row-main' }, [
+      el('p', { class: 'link-host', text: link.host }),
+      el('a', { class: 'link-url', href: link.url, target: '_blank', rel: 'noopener noreferrer', title: link.url, text: link.url }),
+      link.note ? el('p', { class: 'link-note', text: link.note }) : null,
+    ]);
+    var row = el('li', { class: 'link-row is-' + link.status }, [
+      el('div', { class: 'link-row-line' }, [main, UI.status(link.status), trailingControl(link, busy)]),
+    ]);
+    if (link.status === 'failed') {
+      row.appendChild(UI.notice('error', {
+        title: link.reason,
+        text: link.fix,
+        actions: [{ label: 'Retry', run: function (evt) { retryLink(link, evt.currentTarget); } }],
+      }));
     }
     return row;
+  }
+
+  function derived() {
+    var status = AI.status();
+    var served = AI.served && status;
+    return window.LinkStatus.derive({
+      inbox: served ? status.inbox : null,
+      known: known,
+      library: window.getEntries(),
+      drain: AI.drain,
+      retried: retried,
+    });
   }
 
   function renderList() {
     var d = drawer;
     var status = AI.status();
     d.list.textContent = '';
-    if (!AI.served || !status) {
-      d.countLabel.textContent = '';
-      if (addedHere.length) {
-        d.list.appendChild(el('p', { class: 'inbox-section-label', text: 'Added just now' }));
-        d.list.appendChild(el('ul', { class: 'inbox-items' }, addedHere.map(function (item) {
-          return buildItem(item, { removable: false });
-        })));
-      } else {
-        d.list.appendChild(el('div', { class: 'inbox-empty' }, [el('p', { text: 'Nothing added yet.' })]));
-      }
-      return;
-    }
-    var items = status.inbox.items || [];
-    d.countLabel.textContent = items.length ? String(items.length) : '';
-    if (!items.length) {
+    var result = derived();
+    d.countLabel.textContent = result.links.length ? String(result.links.length) : '';
+    if (!result.links.length) {
       d.list.appendChild(el('div', { class: 'inbox-empty' }, [el('p', { text: 'Nothing added yet.' })]));
       return;
     }
-    var draining = AI.drain.running;
-    d.list.appendChild(el('ul', { class: 'inbox-items' }, items.map(function (item) {
-      return buildItem(item, { removable: true, draining: draining });
+    var busy = AI.drain.running;
+    d.list.appendChild(el('ul', { class: 'link-rows' }, result.links.map(function (link) {
+      return buildLinkRow(link, busy);
     })));
-    if (status.inbox.malformed) {
+    if (status && status.inbox && status.inbox.malformed) {
       d.list.appendChild(UI.notice('warning', { title: UI.plural(status.inbox.malformed, 'saved line') + ' couldn’t be read', text: 'It’s left alone.' }));
     }
   }
@@ -477,7 +574,7 @@
     if (drain.total) {
       live.bar.classList.remove('is-indeterminate');
       live.bar.firstChild.style.width = Math.max(4, ((drain.step - 0.5) / drain.total) * 100) + '%';
-      live.title.textContent = 'Analysing ' + splitUrl(drain.currentUrl).host + ' · ' + drain.step + ' of ' + drain.total;
+      live.title.textContent = 'Analysing ' + window.LinkStatus.hostOf(drain.currentUrl) + ' · ' + drain.step + ' of ' + drain.total;
     } else {
       live.bar.classList.add('is-indeterminate');
       live.bar.firstChild.style.width = '';
@@ -496,11 +593,17 @@
     if (!isOpen()) return;
     var status = AI.status();
     // Rebuild the list only when what it shows changed — not on every log line.
+    syncKnown(status);
+    // A new run reports its own failures; the old Retry no longer applies.
+    if (AI.drain.running && retried.length) retried = [];
     var key = JSON.stringify([
       status && status.inbox ? status.inbox.items : null,
       AI.drain.running,
       AI.drain.currentUrl,
-      addedHere.length,
+      AI.drain.finished,
+      AI.drain.error,
+      known,
+      retried,
     ]);
     if (key !== lastListKey || !drawer.list.firstChild) {
       lastListKey = key;
