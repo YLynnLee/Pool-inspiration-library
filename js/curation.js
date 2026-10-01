@@ -461,6 +461,7 @@ var DESIGN_SYSTEM_FIELDS = [
   { key: 'referenceId', type: 'inline-string' },
   { key: 'name', type: 'inline-string' },
   { key: 'description', type: 'multiline-string' },
+  { key: 'measurementNotes', type: 'multiline-string', optional: true },
   { key: 'colors', type: 'nested' },
   { key: 'typography', type: 'nested' },
   { key: 'fonts', type: 'nested', optional: true },
@@ -705,6 +706,12 @@ function serializeDesignMd(entry) {
     if (!text) return;
     proseBlocks.push('## ' + section.heading + '\n\n' + String(text).trim() + '\n');
   });
+
+  // Notes on how the system was measured close the document; an older entry
+  // without them serialises exactly as it always has.
+  if (e.measurementNotes) {
+    proseBlocks.push('## How this was measured\n\n' + String(e.measurementNotes).trim() + '\n');
+  }
 
   return '---\n' + yamlBlocks.join('\n') + '\n---\n\n' + proseBlocks.join('\n');
 }

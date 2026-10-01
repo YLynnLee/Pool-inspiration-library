@@ -108,7 +108,8 @@ test('two commit.js processes writing at once do not lose either reference', asy
       designSystem: {
         referenceId: id,
         name: id,
-        description: 'Colours measured; type inferred from the screenshots.',
+        description: 'A quiet, paper-white page with one ink colour.',
+        measurementNotes: 'Colours measured; type inferred from the screenshots.',
         colors: { surface: { value: '#000000', displayName: 'Void', role: 'the ground' } },
         typography: { body: { fontFamily: 'Inter', fontSize: '16px' } },
         omitted: [{ section: 'components', reason: 'no repeated buttons, cards or inputs on the page' }],

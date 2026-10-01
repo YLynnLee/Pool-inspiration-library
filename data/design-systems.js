@@ -10,6 +10,8 @@ const DESIGN_SYSTEMS = [
     referenceId: 'cosmos-explore',
     name: 'Cosmos — Explore',
     description:
+      'A quiet, paper-white gallery where near-black ink is the only text colour and the imagery carries all the colour. Type is a single tight sans scale, spacing sits on a 4px grid, and corners are soft, with pill-round controls.',
+    measurementNotes:
       "Colours, the cosmosOracle type scale, the spacing histogram and the radius set are measured with scripts/harvest-design.js against the live DOM — the page is not canvas-dominated. The harvest returns several colours as raw lab()/oklch() CSS Color 4 strings rather than rgb() (the site's stylesheet declares colour in those spaces directly), so each was converted to an approximate sRGB hex via a 1x1-canvas fillStyle readback before being recorded below; the hex values are therefore a close render-accurate approximation, not a byte-for-byte replay of the original colour-space value. The single largest measured colour by painted area, near-black #0d0d0d, is not a background panel — direct inspection confirmed it's the one ink colour used for every heading, tab label and card title on the page, which simply sums to a large total area across many small text elements; the screenshots confirm the page reads as overwhelmingly white, and 'surface' below follows the screenshots over the raw area ranking, per extract.md's Interpret step. One measured radius value came back as '1.67772e+07px' — a floating-point artefact of a CSS rounded-full utility rather than a real dimension — and is normalised to 9999px below, the same 'round as the box allows' treatment the Ciao Energy entry gives its own oversized radius.",
     colors: {
       surface: {

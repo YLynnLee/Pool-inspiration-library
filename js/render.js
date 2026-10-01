@@ -703,7 +703,7 @@
     var root = el('div', { class: 'view view-entry' });
 
     root.appendChild(
-      el('a', { class: 'back-link', href: '#/' }, [icon('back'), 'All references'])
+      el('a', { class: 'back-link', href: '#/' }, [icon('back'), 'Library'])
     );
 
     if (!entry) {
@@ -721,14 +721,15 @@
 
     if (window.isDraft(entry)) {
       root.appendChild(
-        el('div', { class: 'detail-draft-notice' }, [
-          el('span', { class: 'draft-badge', text: 'Draft' }),
-          entry.draftReason ? el('span', { class: 'draft-reason', text: entry.draftReason }) : null,
-        ])
+        UI.notice('warning', {
+          title: 'Draft',
+          text: entry.draftReason || 'The site could not be captured usefully.',
+          actions: [{ label: 'Resolve…', run: function () { openResolveModal(entry); } }],
+        })
       );
     }
 
-    // 1. hero screenshot
+    // 1. screenshots: hero plus extra thumbnails, lightbox as ever
     var heroWrap = el('div', { class: 'hero-wrap' });
     var hero = el('img', {
       class: 'hero-image',
@@ -753,46 +754,53 @@
       root.appendChild(extra);
     }
 
-    // 2. name -> sourceUrl
-    var titleRow = el('div', { class: 'entry-title-row' });
+    // 2. caption block: the name and its category on the left, the two
+    // actions on the right. Nothing here navigates except the actions.
+    var actions = el('div', { class: 'entry-actions' });
     // http(s) only: a javascript: sourceUrl would run in the helper's trusted origin.
     if (/^https?:\/\//i.test(entry.sourceUrl || '')) {
-      titleRow.appendChild(
+      actions.appendChild(
         el('a', {
-          class: 'entry-name entry-name-link',
+          class: 'btn btn-secondary btn-sm',
           href: entry.sourceUrl,
           target: '_blank',
           rel: 'noopener noreferrer',
-          text: entry.name,
-        })
+        }, ['Visit site', icon('external')])
       );
-    } else {
-      titleRow.appendChild(el('span', { class: 'entry-name', text: entry.name }));
     }
-    root.appendChild(titleRow);
+    actions.appendChild(
+      el('button', {
+        class: 'btn btn-danger-quiet btn-sm',
+        type: 'button',
+        text: 'Delete…',
+        onclick: function () { openPurgeModal(entry); },
+      })
+    );
+    root.appendChild(el('div', { class: 'entry-caption' }, [
+      el('div', {}, [
+        el('h1', { class: 'entry-name', text: entry.name }),
+        category
+          ? el('p', { class: 'entry-category-line' }, [
+              el('strong', { text: category.name }),
+              category.definition ? ' — ' + category.definition : '',
+            ])
+          : null,
+      ]),
+      actions,
+    ]));
 
-    // 3. category badge + one-line definition, expandable to the full essay
-    if (category) {
-      root.appendChild(buildCategorySection(category));
-    }
-
-    // 4. summary
-    root.appendChild(el('p', { class: 'entry-summary', text: entry.summary }));
-
-    // 5. keyword chips
-    var chipRow = el('div', { class: 'chip-row' });
-    (entry.keywords || []).forEach(function (kw) {
-      chipRow.appendChild(
-        el('a', {
-          class: 'chip',
-          href: buildGridHash({ query: '', category: '', keyword: kw }),
-          text: kw,
-        })
-      );
-    });
-    root.appendChild(el('section', { class: 'entry-section' }, [
-      el('h2', { class: 'section-label', text: 'Keywords' }),
-      chipRow,
+    // 3. summary and keywords, under the same labels as Breakdown
+    root.appendChild(el('div', { class: 'entry-facts' }, [
+      el('section', {}, [
+        el('h2', { class: 'section-label', text: 'Summary' }),
+        el('p', { class: 'type-notes', text: entry.summary }),
+      ]),
+      el('section', {}, [
+        el('h2', { class: 'section-label', text: 'Keywords' }),
+        el('ul', { class: 'keyword-list' }, (entry.keywords || []).map(function (kw) {
+          return el('li', { text: kw });
+        })),
+      ]),
     ]));
 
     // 6. everything past the header is tabbed: the design
@@ -958,6 +966,18 @@
   // filter blanks rather than every builder needing its own presence check
   // — an omitted section renders as nothing, never an empty panel.
 
+  // Collapsed by default: the detail is there if wanted, out of the way if not.
+  // A design system extracted before the split has no notes and gets no section.
+  function buildMeasurementNotes(notes) {
+    if (!notes) return null;
+    return el('section', { class: 'entry-section' }, [
+      el('details', { class: 'measurement-notes' }, [
+        el('summary', { text: 'How this was measured' }),
+        el('p', { class: 'type-notes', text: notes }),
+      ]),
+    ]);
+  }
+
   function buildDesignSystemSections(ds) {
     var frag = document.createDocumentFragment();
     if (ds.description) {
@@ -973,6 +993,7 @@
       buildDesignElevationPanel(ds.sections),
       buildDesignDosDontsPanel(ds.sections && ds.sections.dosAndDonts),
       buildDesignOmittedPanel(ds.omitted),
+      buildMeasurementNotes(ds.measurementNotes),
     ].forEach(function (panel) {
       if (panel) frag.appendChild(panel);
     });
@@ -1240,21 +1261,6 @@
       el('h2', { class: 'section-label', text: 'Not observed' }),
       list,
     ]);
-  }
-
-  function buildCategorySection(category) {
-    var wrap = el('div', { class: 'category-section' });
-    var row = el('div', { class: 'category-badge-row' }, [
-      el('a', {
-        class: 'category-badge',
-        href: buildGridHash({ query: '', category: category.id, keyword: '' }),
-        text: category.name,
-      }),
-      el('span', { class: 'category-definition', text: category.definition }),
-    ]);
-    wrap.appendChild(row);
-
-    return wrap;
   }
 
   // Shared by every entry-section whose h2 sits opposite one action element
