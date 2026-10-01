@@ -203,6 +203,9 @@
   var state = {
     connected: true,
     running: false,
+    model: '',
+    pending: null,
+    checking: false,
     links: [
       { url: 'https://linear.app/method', note: 'the tight type scale', status: 'added', ref: 'Linear — Method' },
       { url: 'https://www.figma.com/blocked-example/', note: '', status: 'failed', reason: 'The site blocked the screenshot', fix: 'Retry — it often works on a second try. If it keeps failing, remove it and capture it by hand.' },
@@ -278,7 +281,7 @@
       waiting: ['Waiting', null],
       analysing: ['Analysing', 'spinner'],
       added: ['Added', 'check'],
-      failed: ['Couldn’t analyse', 'alert'],
+      failed: ['Failed', 'alert'],
     };
     var m = map[link.status];
     var glyph = m[1] === 'spinner' ? el('span', { class: 'spinner', 'aria-hidden': 'true' })
@@ -377,6 +380,48 @@
     }));
   }
 
+  // Which model this AI analyses with. Switching the AI itself stays in the
+  // header; this only picks among the connected AI's models. Choosing one
+  // re-runs the connection test (stubbed here as a short delay), so a model
+  // that can't answer never replaces one that can.
+  var MODELS = [
+    { id: '', label: 'Its own default' },
+    { id: 'opus', label: 'Opus 5.5' },
+    { id: 'sonnet', label: 'Sonnet 5.5' },
+    { id: 'haiku', label: 'Haiku 4.5' },
+  ];
+
+  function buildModelPicker() {
+    var select = el('select', { class: 'field proto-model-select', 'aria-label': 'Model', disabled: !!state.checking },
+      MODELS.map(function (m) { return el('option', { value: m.id, text: m.label }); }));
+    select.value = state.pending != null ? state.pending : state.model;
+    select.addEventListener('change', function () {
+      state.pending = select.value;
+      state.checking = true;
+      render();
+      window.setTimeout(function () {
+        state.checking = false;
+        state.model = state.pending;
+        state.pending = null;
+        render();
+        UI.toast('Now analysing with ' + modelLabel(state.model) + '.');
+      }, 1400);
+    });
+    return el('div', { class: 'proto-model' }, [
+      el('label', { class: 'proto-model-label' }, [
+        el('span', { class: 'section-label', text: 'Analyse with' }),
+        el('span', { class: 'proto-model-ai' }, [el('span', { class: 'status-dot', 'aria-hidden': 'true' }), 'Claude Code']),
+      ]),
+      select,
+      state.checking ? el('p', { class: 'proto-footer-meta', 'aria-live': 'polite' }, [el('span', { class: 'spinner', 'aria-hidden': 'true' }), ' Checking ' + modelLabel(state.pending) + ' answers…']) : null,
+    ]);
+  }
+
+  function modelLabel(id) {
+    var m = MODELS.filter(function (x) { return x.id === id; })[0];
+    return m ? m.label : id;
+  }
+
   function buildFooter() {
     var waiting = count('waiting');
     var footer = el('div', { class: 'proto-footer' });
@@ -396,12 +441,13 @@
       var added = count('added');
       var failed = count('failed');
       footer.appendChild(failed
-        ? notice('warning', added + ' added · ' + failed + ' couldn’t be analysed', 'Each failed link above says what went wrong and how to fix it.')
+        ? notice('warning', added + ' added · ' + failed + ' failed', 'Each failed link above says what went wrong and how to fix it.')
         : notice('success', added + ' added to your library', null));
     }
     if (waiting) {
-      footer.appendChild(el('button', { class: 'btn btn-primary btn-block', type: 'button', text: 'Analyse ' + UI.plural(waiting, 'link'), onclick: startRun }));
-      footer.appendChild(el('p', { class: 'proto-footer-meta', text: 'With Claude Code · a few minutes each · uses your plan or credit. You can stop any time; finished ones stay.' }));
+      footer.appendChild(buildModelPicker());
+      footer.appendChild(el('button', { class: 'btn btn-primary btn-block', type: 'button', disabled: !!state.checking, text: 'Analyse ' + UI.plural(waiting, 'link'), onclick: startRun }));
+      footer.appendChild(el('p', { class: 'proto-footer-meta', text: 'A few minutes each · uses your plan or credit. You can stop any time; finished ones stay.' }));
     }
     return footer.childNodes.length ? footer : null;
   }
@@ -418,14 +464,26 @@
         input.focus();
         return;
       }
-      state.links.unshift({ url: value, note: '', status: 'waiting' });
+      state.links.unshift({ url: value, note: note.value.trim(), status: 'waiting' });
       state.finished = false;
       input.value = '';
+      note.value = '';
       render();
     }
+    var note = el('textarea', { class: 'field proto-note', rows: '2', placeholder: 'What caught your eye? (optional)', 'aria-label': 'Note', hidden: true });
+    var noteToggle = el('button', { class: 'link-btn', type: 'button' }, [icon('plus'), 'Add a note']);
+    noteToggle.addEventListener('click', function () {
+      note.hidden = false;
+      noteToggle.hidden = true;
+      note.focus();
+    });
     var form = el('form', { class: 'proto-add-form', onsubmit: add }, [
       el('div', { class: 'proto-add-row' }, [input, el('button', { class: 'btn btn-primary', type: 'submit', text: 'Add' })]),
-      el('p', { class: 'proto-add-hint', text: 'Tip: paste a link anywhere on the library page and it lands here.' }),
+      note,
+      el('div', { class: 'proto-add-meta' }, [
+        noteToggle,
+        el('p', { class: 'proto-add-hint', text: 'Or paste a link anywhere on the library page.' }),
+      ]),
       feedback,
     ]);
 
