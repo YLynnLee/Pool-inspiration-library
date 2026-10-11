@@ -194,12 +194,12 @@ function cfg(o) {
 }
 
 test('AI line: an agent app shows its name and the model the connection test reported', () => {
-  assert.deepEqual(describeAi(cfg({})), { name: 'Claude Code', model: 'opus', canChange: true });
+  assert.deepEqual(describeAi(cfg({})), { name: 'Claude Code', model: 'Opus 5.5', canChange: true });
 });
 
 test('AI line: a model chosen by the collector wins over the one the test reported', () => {
   const c = cfg({ agent: { preset: 'claude', command: 'claude', model: 'sonnet' } });
-  assert.equal(describeAi(c).model, 'sonnet');
+  assert.equal(describeAi(c).model, 'Sonnet 5.5');
 });
 
 test('AI line: an API shows the provider and its model', () => {

@@ -474,10 +474,10 @@
     var lede = stopped ? 'Still connected to ' + aiLabel(lastConfig) + '.'
       : p === 'helper' ? 'One thing first: Pool has to be running on this computer.'
       : p === 'scan' ? 'Looking at what’s already on this computer…'
-      : connection ? 'Analysing with ' + (aiLabel(cached.config) || connection.label) + '.'
+      : connection ? ''
       : 'Pool uses an AI to write up each reference you capture. Pick one you already use.';
     return el('div', { class: 'cp-pane-head' }, [
-      el('div', {}, [el('h2', { class: 'add-modal-title', text: title }), el('p', { class: 'ai-lede', text: lede })]),
+      el('div', {}, [el('h2', { class: 'add-modal-title', text: title }), lede ? el('p', { class: 'ai-lede', text: lede }) : null]),
       el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: closeModal }, [icon('close')]),
     ]);
   }
@@ -752,9 +752,6 @@
           onclick: function () { ui.method[ai.id] = m.id; renderPane(); },
         });
       })));
-    }
-    if (connection && !connectedHere) {
-      pane.appendChild(el('p', { class: 'ai-hint cp-replaces', text: 'Connecting this replaces ' + (aiLabel(cached.config) || connection.label) + '.' }));
     }
     if (connectedHere && methodModeIs(method, cached.config.mode)) return connectedInto(pane);
 
@@ -1277,12 +1274,13 @@
     ]);
   }
 
-  // Picks the model this AI drains with. An agent app gets "its own default"
+  // Picks the model this AI drains with. An agent app gets an "Automatic" choice
   // plus its models (or a typed name); an API gets its model list.
   function modelPicker(block, config, running) {
     var agentMode = config.mode === 'agent';
     var current = agentMode ? config.agent.model || '' : config.api.model;
     var OTHER_MODEL = '\u0000other';
+    var appName = (window.LinkStatus.describeAi(config) || {}).name || 'the app';
     var status = statusSlot();
     var select = el('select', { class: 'add-modal-input', 'aria-label': 'Model', hidden: 'hidden' });
     var typed = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Model name', placeholder: 'Model name', hidden: 'hidden' });
@@ -1309,7 +1307,7 @@
         return typeof m === 'string' ? { id: m, label: m } : m;
       });
       var free = agentMode ? r.free : true;
-      if (agentMode) options.unshift({ id: '', label: 'Its own default' });
+      if (agentMode) options.unshift({ id: '', label: 'Automatic (' + appName + ' chooses)' });
       if (current && !options.some(function (o) { return o.id === current; })) options.push({ id: current, label: current });
       if (free) options.push({ id: OTHER_MODEL, label: 'Other…' });
       options.forEach(function (o) {
@@ -1334,7 +1332,7 @@
       setStatus(status, 'info', agentMode ? 'Checking it answers…' : 'Checking it can see images…', agentMode ? 'This can take up to a minute.' : null);
       setModel(model).then(function () {
         var now = window.LinkStatus.describeAi(cached.config);
-        ui.modelNotice = { title: 'Now using ' + ((now && now.model) || (model ? model : 'its own default model')), text: 'Your next analyses use it.' };
+        ui.modelNotice = { title: 'Now using ' + ((now && now.model) || (model ? window.LinkStatus.modelName(model) : 'automatic model choice')), text: 'Your next analyses use it.' };
         renderPane();
       }).catch(function (err) {
         if (err.helperDown) return;

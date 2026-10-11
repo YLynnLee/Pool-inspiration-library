@@ -360,7 +360,7 @@ test('a failure that is not about login says what happened and keeps one primary
   });
 });
 
-test('an AI that connects two ways has tabs, and connecting another AI says it replaces the current one', async (t) => {
+test('an AI that connects two ways has tabs, and connecting another AI does not repeat that it replaces the current one', async (t) => {
   const fake = createFakeAi({ detect: claudeApp(true, 'yes') });
   fake.setConnection({ label: 'ChatGPT · gpt-5', ai: 'chatgpt', at: new Date().toISOString() });
   await withApp(t, { ai: fake }, async (app) => {
@@ -370,7 +370,7 @@ test('an AI that connects two ways has tabs, and connecting another AI says it r
     await waitForPane(app, 'Claude');
     assert.equal(await dialog(app).getByRole('tab', { name: 'Claude subscription' }).count(), 1);
     assert.equal(await dialog(app).getByRole('tab', { name: 'API key' }).count(), 1);
-    assert.match(await dialog(app).innerText(), /Connecting this replaces ChatGPT/);
+    assert.doesNotMatch(await dialog(app).innerText(), /Connecting this replaces/);
   });
 });
 
@@ -716,13 +716,13 @@ async function openConnected(app) {
   await dialog(app).locator('select[aria-label="Model"]:not([hidden])').waitFor({ timeout: 5000 });
 }
 
-test('connected: only the connection — model dropdown with the app\'s models and its own default, Use this model only for a different one', async (t) => {
+test('connected: only the connection — model dropdown with the app\'s models and an Automatic choice, Use this model only for a different one', async (t) => {
   const fake = createFakeAi({ detect: claudeApp(true, 'yes'), models: MODELS });
   fake.setConnection(CLAUDE_ON);
   await withApp(t, { ai: fake, inbox: waiting(2) }, async (app) => {
     await openConnected(app);
     const options = await dialog(app).locator('select[aria-label="Model"] option').allInnerTexts();
-    assert.deepEqual(options.map((s) => s.trim()), ['Its own default', 'Sonnet 5.5', 'Opus 5.5']);
+    assert.deepEqual(options.map((s) => s.trim()), ['Automatic (Claude chooses)', 'Sonnet 5.5', 'Opus 5.5']);
     assert.equal(await dialog(app).locator('.cp-handoff').count(), 0, 'no hand-off when merely opening the window');
     assert.equal(await dialog(app).getByText(/Setup steps/i).count(), 0);
     assert.equal(await buttonNamed(app, 'Use this model').isDisabled(), true, 'nothing changed yet');

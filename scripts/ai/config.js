@@ -31,7 +31,7 @@ var CONFIG_FILE = path.join(ROOT, '.drain.config.json');
 // (the id first, then an optional tab and label). An agent with neither
 // still takes a typed model name.
 var AGENT_PRESETS = [
-  { id: 'claude', label: 'Claude Code', command: 'claude --print --dangerously-skip-permissions', modelFlag: '--model', models: [['opus', 'Opus'], ['sonnet', 'Sonnet'], ['haiku', 'Haiku'], ['fable', 'Fable']] },
+  { id: 'claude', label: 'Claude Code', command: 'claude --print --dangerously-skip-permissions', modelFlag: '--model', models: [['opus', 'Opus 5.5'], ['sonnet', 'Sonnet 5.5'], ['haiku', 'Haiku 5.5'], ['fable', 'Fable 5.1']] },
   { id: 'codex', label: 'Codex CLI', command: 'codex exec --dangerously-bypass-approvals-and-sandbox', modelFlag: '--model' },
   // agy's print mode gives up after 5 minutes by default; a drain takes longer.
   { id: 'antigravity', label: 'Antigravity CLI', command: 'agy --dangerously-skip-permissions --print-timeout 60m -p', modelFlag: '--model', listModels: 'agy models' },

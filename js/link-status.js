@@ -191,16 +191,27 @@
   // The "AI · model" line, from the helper's public config: the AI's name,
   // the model it will use, and whether the model can be changed here. A
   // custom command picks its own model, so it has none to show or change.
+  // Claude's short aliases and API ids as the names people know: "opus" ->
+  // "Opus 5.5". Anything else is shown as given.
+  var CLAUDE_ALIASES = { opus: 'Opus 5.5', sonnet: 'Sonnet 5.5', haiku: 'Haiku 5.5', fable: 'Fable 5.1' };
+  function modelName(id) {
+    var m = String(id || '');
+    if (CLAUDE_ALIASES[m.toLowerCase()]) return CLAUDE_ALIASES[m.toLowerCase()];
+    var v = /^claude-(opus|sonnet|haiku|fable)-(\d+)(?:[-.](\d+))?(?:-\d{8})?$/i.exec(m);
+    if (!v) return m;
+    return v[1].charAt(0).toUpperCase() + v[1].slice(1).toLowerCase() + ' ' + v[2] + (v[3] ? '.' + v[3] : '');
+  }
+
   function describeAi(config) {
     if (!config || !config.connection) return null;
     var label = String(config.connection.label || '');
     var parts = label.split(' · ');
     if (config.mode === 'api') {
-      return { name: parts[0], model: (config.api && config.api.model) || parts.slice(1).join(' · '), canChange: true };
+      return { name: parts[0], model: modelName((config.api && config.api.model) || parts.slice(1).join(' · ')), canChange: true };
     }
     var agent = config.agent || {};
     if (agent.preset === 'custom') return { name: parts[0], model: '', canChange: false };
-    return { name: parts[0], model: agent.model || parts.slice(1).join(' · '), canChange: true };
+    return { name: parts[0], model: modelName(agent.model || parts.slice(1).join(' · ')), canChange: true };
   }
 
   // A model list as { id, label } choices, with the current model always
@@ -218,7 +229,7 @@
     return [found || { id: current, label: current }].concat(options);
   }
 
-  var api = { derive: derive, explainFailure: explainFailure, key: key, hostOf: hostOf, headerLabel: headerLabel, describeAi: describeAi, modelOptions: modelOptions };
+  var api = { derive: derive, explainFailure: explainFailure, key: key, hostOf: hostOf, headerLabel: headerLabel, describeAi: describeAi, modelName: modelName, modelOptions: modelOptions };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.LinkStatus = api;
 })(typeof window !== 'undefined' ? window : this);

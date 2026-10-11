@@ -283,7 +283,7 @@
       : phase === 'scan' ? 'Looking at what’s already on this computer…'
       : c && state.problem ? connLabel() + ' needs attention.'
       : c && state.helper === 'stopped' ? 'Still connected to ' + connLabel() + '.'
-      : c ? 'Analysing with ' + connLabel() + '.'
+      : c ? ''
       : 'Pool uses an AI to write up each reference you capture. Pick one you already use.';
     return el('div', { class: 'cp-pane-head' }, [
       el('div', {}, [el('h2', { class: 'add-modal-title', text: title }), el('p', { class: 'ai-lede', text: lede })]),
@@ -532,7 +532,6 @@
         return el('button', { class: 'ai-segment-btn', type: 'button', 'aria-pressed': String(m === method), text: m.id === 'key' ? 'API key' : m.label, onclick: function () { chosenMethod[ai.id] = m.id; rerender(); } });
       })));
     }
-    if (c && c.ai !== ai.id) root.appendChild(el('p', { class: 'ai-hint cp-replaces', text: 'Connecting this replaces ' + connLabel() + '.' }));
 
     var connectedHere = c && c.ai === ai.id && c.method === method.id;
     var guide = param('guide', GUIDES, 'A');
