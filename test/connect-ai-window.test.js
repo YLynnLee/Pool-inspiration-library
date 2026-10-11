@@ -99,6 +99,12 @@ test('Pool stopped with a connection: "Pool stopped running", one primary Start 
     assert.match(await header(app).innerText(), /Pool stopped/);
     assert.equal(await header(app).locator('svg').count(), 1, 'an alert icon, not colour alone');
     assert.match((await header(app).getAttribute('title')) || '', /Pool/);
+
+    // the Pool stopped face opens the window too
+    await app.page.keyboard.press('Escape');
+    assert.equal(await dialog(app).count(), 0);
+    await openWindow(app);
+    assert.match(await dialog(app).innerText(), /Pool stopped running/);
   });
 });
 
@@ -202,5 +208,34 @@ test('the Add drawer still shows AI · model off the shared state', async (t) =>
     await line.waitFor({ timeout: 5000 });
     assert.match(await line.innerText(), /Claude/);
     assert.match(await line.innerText(), /Sonnet 5\.5/);
+  });
+});
+
+test('the Add drawer\'s AI · model line switches model through the shared state', async (t) => {
+  const fake = createFakeAi({
+    detect: SOMETHING_FOUND,
+    models: { models: [{ id: 'opus', label: 'Opus 5.5' }, { id: 'sonnet', label: 'Sonnet 5.5' }], free: false },
+    connect: { ok: true, message: 'Now using Opus 5.5.', label: 'Claude · Opus 5.5' },
+  });
+  fake.setConnection(CLAUDE_ON);
+  await withApp(t, { ai: fake }, async (app) => {
+    await app.page.keyboard.press('i');
+    await app.page.locator('.ai-line.is-button').click();
+    await app.page.getByRole('radio', { name: 'Opus 5.5' }).click();
+    await app.page.getByText('Now using Opus 5.5.').waitFor({ timeout: 5000 });
+    const call = fake.calls.filter((c) => c.name === 'connect').pop();
+    assert.equal(call.arg.agent.model, 'opus');
+  });
+});
+
+test('phone width: Something else is reachable in the strip', async (t) => {
+  const fake = createFakeAi({ detect: SOMETHING_FOUND });
+  await withApp(t, { ai: fake, viewport: { width: 390, height: 780 } }, async (app) => {
+    await openWindow(app);
+    const other = app.page.locator('.cp-list .cp-row', { hasText: 'Something else' });
+    await other.waitFor({ timeout: 8000 });
+    await other.scrollIntoViewIfNeeded();
+    await other.click();
+    assert.equal((await app.page.locator('.cp-pane-title').first().innerText()).trim(), 'Something else');
   });
 });

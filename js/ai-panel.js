@@ -457,7 +457,7 @@
       : 'Pool uses an AI to write up each reference you capture. Pick one you already use.';
     return el('div', { class: 'cp-pane-head' }, [
       el('div', {}, [el('h2', { class: 'add-modal-title', text: title }), el('p', { class: 'ai-lede', text: lede })]),
-      el('button', { class: 'cp-x', type: 'button', 'aria-label': 'Close', onclick: closeModal }, [icon('close')]),
+      el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onclick: closeModal }, [icon('close')]),
     ]);
   }
 
@@ -803,7 +803,7 @@
 
     return [
       step(1, 'Install ' + m.app, installed, installed ? [] : [
-        hint(m.app + ' is the free app that lets the library use your ' + m.label.toLowerCase() + '.'),
+        hint(m.app + ' is the app that lets the library use your ' + m.label.toLowerCase() + '.'),
         el('div', { class: 'ai-row' }, [
           terminalButton('Install ' + m.app, { ai: ai.id, action: 'install' }, installStatus),
           checkAgainButton(),
@@ -903,7 +903,7 @@
       step(1, 'Install and open ' + m.label, running, running ? [] : [
         el('p', { class: 'ai-hint' }, [
           extLink(m.download, 'Download ' + m.label),
-          document.createTextNode(' — free. ' + (m.pull.length ? m.startHint : 'Then open it.')),
+          document.createTextNode(' — ' + (m.pull.length ? m.startHint : 'then open it.')),
         ]),
         el('div', { class: 'ai-row' }, [checkAgainButton()]),
       ]),
