@@ -223,8 +223,9 @@ add a bespoke button style.
   lifts the border and fill. The default for everything that isn't the main action — header
   buttons, modal Cancel/Close, Copy/Download, tile actions.
 - **Danger** (`.btn-danger`): filled soft red (`#ff8a8a`), used only on the button that deletes
-  for good. **Quiet danger** (`.btn-danger-quiet`, on a secondary): looks secondary, turns red
-  on hover — for a destructive option that isn't the confirmation (Delete… on a tile).
+  for good. **Quiet danger** (`.btn-danger-quiet`, on a secondary): a secondary with red text and a
+  red-tinted border at rest, so it reads as destructive before hover — for a destructive option
+  that isn't the confirmation (Delete… on a tile, Disconnect).
 - **Small** (`.btn-sm`) and **block** (`.btn-block`, full width) are modifiers on any variant.
 - **Icon-only** (`.icon-btn`): borderless, faint icon, brightens on hover; always has an
   `aria-label`. **Link-button** (`.link-btn`): text-only, for a quiet in-flow action ("+ Add a
