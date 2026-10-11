@@ -107,7 +107,11 @@ async function testConnection(config) {
           model: model,
         };
       }
-      return { ok: false, message: argv[0] + ' didn’t answer' + (text ? ': “' + text.slice(-300) + '”' : '') + '. If you haven’t logged in yet, do step 2 first.' };
+      var failure = { ok: false, message: argv[0] + ' didn’t answer' + (text ? ': “' + text.slice(-300) + '”' : '') + '.' };
+      // Read against the catalog's login prompts for this app. A match is
+      // reported so the window can send the collector to the login step.
+      if (catalog.looksLoggedOut(config.agent.preset, text)) failure.loggedOut = true;
+      return failure;
     } catch (e) {
       return { ok: false, message: e.message };
     }
@@ -130,12 +134,16 @@ async function testConnection(config) {
 
 // What the Connect panel can offer on this machine: which agent apps are
 // installed, which local model servers are running (and their models), and
-// which providers already have a key in the environment.
-async function detect(options) {
+// which providers already have a key in the environment. Each agent app also
+// says whether it's signedIn: 'yes' | 'no' | 'unknown', from what the helper
+// has seen of its tests (see config.loginState).
+// `storage` ({ file, store }) is where the config is read from.
+async function detect(options, storage) {
   if (!pathRefreshed || (options && options.fresh)) refreshPath();
   await pathRefreshed;
+  var saved = configModule.loadConfig(storage);
   var agents = configModule.AGENT_PRESETS.filter(function (p) { return p.id !== 'custom'; }).map(function (p) {
-    return { id: p.id, label: p.label, command: p.command, installed: onPath(p.command.split(' ')[0]) };
+    return { id: p.id, label: p.label, command: p.command, installed: onPath(p.command.split(' ')[0]), signedIn: configModule.loginState(saved, p.id) };
   });
   var local = await Promise.all(['ollama', 'lmstudio'].map(function (id) {
     var provider = configModule.findProvider(id);
@@ -153,8 +161,8 @@ async function detect(options) {
 // key being entered (or the saved one), or, in agent mode, the agent's own
 // list, with a suggested default, so the collector picks from a list instead
 // of typing a name.
-async function models(update) {
-  var draft = configModule.mergeConfig(configModule.loadConfig(), update);
+async function models(update, storage) {
+  var draft = configModule.mergeConfig(configModule.loadConfig(storage), update);
   if (draft.mode === 'agent') return agentModels(configModule.findPreset(draft.agent.preset));
   var ids = await providers.listModels(draft.api);
   return { models: ids, suggested: configModule.pickModel(draft.api.provider, ids) };
@@ -190,16 +198,29 @@ function parseModelList(text) {
 }
 
 // Connect = apply the choice, prove it works, and only then save it as the
-// connection the Drain button uses. A failed test saves nothing.
-async function connect(update) {
-  var draft = configModule.mergeConfig(configModule.loadConfig(), update);
+// connection the Drain button uses. A failed test saves no connection — but a
+// pass, or a login prompt in the failure, is remembered for that agent app.
+async function connect(update, storage) {
+  var draft = configModule.mergeConfig(configModule.loadConfig(storage), update);
   draft.connection = null;
   var result = await testConnection(draft);
+  if (draft.mode === 'agent') {
+    var event = result.ok ? 'answered' : result.loggedOut ? 'loggedOut' : null;
+    if (event) {
+      var remembered = configModule.recordLogin(draft, draft.agent.preset, event);
+      if (result.ok) draft = remembered;
+      else configModule.saveConfig(Object.assign(configModule.loadConfig(storage), { logins: remembered.logins }), storage);
+    }
+  }
   if (!result.ok) return result;
   var label = configModule.connectionLabel(draft);
   if (draft.mode === 'agent' && result.model) label += ' · ' + result.model;
-  draft.connection = { label: label, ai: typeof update.ai === 'string' ? update.ai : null, at: new Date().toISOString() };
-  configModule.saveConfig(draft);
+  // Changing model on the same AI keeps "connected since" as it was.
+  var aiId = typeof update.ai === 'string' ? update.ai : null;
+  var previous = configModule.loadConfig(storage).connection;
+  var since = previous && aiId && previous.ai === aiId && previous.at ? previous.at : new Date().toISOString();
+  draft.connection = { label: label, ai: aiId, at: since };
+  configModule.saveConfig(draft, storage);
   return { ok: true, message: 'Connected to ' + draft.connection.label + '.' };
 }
 
@@ -216,13 +237,15 @@ async function runTerminalAction(body) {
   }
 }
 
-function disconnect() {
-  var config = configModule.loadConfig();
+// Clears the connection only: installed apps and logins are untouched, so the
+// window can land on the step the collector is actually at.
+function disconnect(storage) {
+  var config = configModule.loadConfig(storage);
   config.connection = null;
-  configModule.saveConfig(config);
+  configModule.saveConfig(config, storage);
 }
 
-// options: { url?, log(line), signal? }
+// options: { url?, log(line), signal?, remaining?() }
 async function runDrain(config, options) {
   var problems = configModule.configProblems(config);
   if (problems.length) throw new Error(problems.join(' '));
@@ -233,4 +256,88 @@ async function runDrain(config, options) {
   return apiDrain.runApiDrain(Object.assign({ api: config.api }, options));
 }
 
-module.exports = { testConnection: testConnection, runDrain: runDrain, detect: detect, models: models, connect: connect, disconnect: disconnect, runTerminalAction: runTerminalAction, refreshPath: refreshPath, extractAgentModel: extractAgentModel, parseModelList: parseModelList };
+// The words for each kind of connection-level failure. `short` goes in the
+// header, `title` is its tooltip, `text` is the pane's warning (with how many
+// links are still waiting added). None of it quotes the agent's or API's own
+// output, so a key can't end up here.
+var PROBLEM_KINDS = {
+  'logged-out': { short: 'logged out', title: function (who) { return who + ' is logged out. Log in again to keep analysing.'; }, text: function (who) { return who + ' logged out while analysing.'; } },
+  'key-rejected': { short: 'key not working', title: function (who) { return 'The key for ' + who + ' isn’t working. Check it, or connect another AI.'; }, text: function (who) { return 'The key for ' + who + ' stopped working while analysing.'; } },
+  'not-answering': { short: 'not answering', title: function (who) { return who + ' isn’t answering. Check it is running, then check again.'; }, text: function (who) { return who + ' stopped answering while analysing.'; } },
+};
+
+function waitingText(count) {
+  if (!(count > 0)) return '';
+  return ' ' + (count === 1 ? '1 link is' : count + ' links are') + ' still waiting.';
+}
+
+function buildProblem(kind, who, waiting) {
+  var words = PROBLEM_KINDS[kind];
+  return { kind: kind, short: words.short, title: words.title(who), text: words.text(who) + waitingText(waiting), at: new Date().toISOString() };
+}
+
+// Which connection-level failure a stopped drain amounts to, or null. One
+// link failing to capture is not one: that leaves the connection alone.
+function connectionFailure(config, outcome, text) {
+  if (config.mode === 'agent') {
+    var stopped = outcome && outcome.code !== undefined && outcome.code !== 0;
+    return stopped && catalog.looksLoggedOut(config.agent.preset, text) ? 'logged-out' : null;
+  }
+  // Links that never reached the model (a duplicate, a site that wouldn't
+  // load) say nothing about the connection. If any link that did reach it
+  // went through, the connection works and the rest failed on their own.
+  var reached = ((outcome && outcome.outcomes) || []).filter(function (o) { return o.kind !== 'duplicate' && o.kind !== 'fetch-failed'; });
+  if (!reached.length || reached.some(function (o) { return o.kind !== 'error'; })) return null;
+  var reasons = reached.map(function (o) { return String(o.reason || ''); });
+  if (reasons.some(function (r) { return /\bHTTP (401|403)\b|key was not accepted/i.test(r); })) return 'key-rejected';
+  if (reasons.some(function (r) { return /could not reach/i.test(r); })) return 'not-answering';
+  return null;
+}
+
+// A drain, and afterwards a record of why it stopped when the connection
+// itself was the reason, kept on the connection for the header and window.
+async function runDrainRecording(config, options, storage) {
+  var tail = [];
+  var wrapped = Object.assign({}, options, {
+    log: function (line) {
+      tail.push(line);
+      if (tail.length > 40) tail.shift();
+      options.log(line);
+    },
+  });
+  var outcome = await runDrain(config, wrapped);
+  var aborted = options.signal && options.signal.aborted;
+  var kind = aborted ? null : connectionFailure(config, outcome, tail.join('\n'));
+  if (kind) {
+    var saved = configModule.loadConfig(storage);
+    if (saved.connection) {
+      var waiting = typeof options.remaining === 'function' ? options.remaining() : 0;
+      saved.connection.problem = buildProblem(kind, configModule.connectionLabel(saved), waiting);
+      if (kind === 'logged-out' && saved.mode === 'agent') saved = configModule.recordLogin(saved, saved.agent.preset, 'loggedOut');
+      configModule.saveConfig(saved, storage);
+    }
+  }
+  return outcome;
+}
+
+// The helper's AI layer. `storage` ({ file, store }) says where the config and
+// its keys live; the tests point it at a temp directory. The default layer,
+// exported below, uses .drain.config.json and the OS secret store.
+function create(storage) {
+  return {
+    loadConfig: function () { return configModule.loadConfig(storage); },
+    testConnection: testConnection,
+    runDrain: function (config, options) { return runDrainRecording(config, options, storage); },
+    detect: function (options) { return detect(options, storage); },
+    models: function (update) { return models(update, storage); },
+    connect: function (update) { return connect(update, storage); },
+    disconnect: function () { return disconnect(storage); },
+    runTerminalAction: runTerminalAction,
+    refreshPath: refreshPath,
+    extractAgentModel: extractAgentModel,
+    parseModelList: parseModelList,
+  };
+}
+
+module.exports = create();
+module.exports.create = create;

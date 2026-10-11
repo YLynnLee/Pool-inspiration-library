@@ -60,12 +60,54 @@ var API_PROVIDERS = [
 
 // connection: set only by a successful Connect (a passing connection test),
 // cleared by any settings change — it's what the app's Drain button checks.
+// logins: what the helper has seen of each agent app's login, by preset id:
+// { answered: <iso time of the last passing test>, loggedOut: <bool> }. Most
+// agent apps have no "am I logged in?" command, so login is inferred from how
+// tests turned out. Disconnecting leaves it alone.
 var DEFAULT_CONFIG = {
   connection: null,
+  logins: {},
   mode: 'agent',
   agent: { preset: 'claude', command: AGENT_PRESETS[0].command, model: '' },
   api: { provider: 'anthropic', baseUrl: API_PROVIDERS[0].baseUrl, model: API_PROVIDERS[0].model, apiKey: '' },
 };
+
+// 'yes' once it has answered and isn't logged out, 'no' when its last failure
+// was a login prompt, 'unknown' when it has never been tested.
+function loginState(config, presetId) {
+  var login = config.logins && config.logins[presetId];
+  if (!login) return 'unknown';
+  if (login.loggedOut) return 'no';
+  return login.answered ? 'yes' : 'unknown';
+}
+
+// The config with one preset's login record updated: a passing test sets
+// `answered` and clears `loggedOut`; a login prompt sets `loggedOut`.
+function recordLogin(config, presetId, event) {
+  var next = JSON.parse(JSON.stringify(config));
+  next.logins = next.logins || {};
+  var login = Object.assign({ answered: '', loggedOut: false }, next.logins[presetId]);
+  if (event === 'answered') {
+    login.answered = new Date().toISOString();
+    login.loggedOut = false;
+  } else if (event === 'loggedOut') {
+    login.loggedOut = true;
+  }
+  next.logins[presetId] = login;
+  return next;
+}
+
+// Only well-formed records survive a read of the file.
+function cleanLogins(raw) {
+  var clean = {};
+  if (!raw || typeof raw !== 'object') return clean;
+  Object.keys(raw).forEach(function (id) {
+    var login = raw[id];
+    if (!login || typeof login !== 'object' || !AGENT_PRESETS.some(function (p) { return p.id === id; })) return;
+    clean[id] = { answered: typeof login.answered === 'string' ? login.answered : '', loggedOut: login.loggedOut === true };
+  });
+  return clean;
+}
 
 function findProvider(id) {
   return API_PROVIDERS.find(function (p) { return p.id === id; }) || API_PROVIDERS[API_PROVIDERS.length - 1];
@@ -257,6 +299,7 @@ function loadConfig(options) {
   var savedKey = raw.api && raw.api.savedKey;
   if (raw.api) delete raw.api.apiKey;
   var config = mergeConfig(DEFAULT_CONFIG, raw);
+  config.logins = cleanLogins(raw.logins);
 
   if (legacyKey) {
     config.api.apiKey = legacyKey;
@@ -313,6 +356,8 @@ module.exports = {
   CONFIG_FILE: CONFIG_FILE,
   findProvider: findProvider,
   findPreset: findPreset,
+  loginState: loginState,
+  recordLogin: recordLogin,
   mergeConfig: mergeConfig,
   resolveApiKey: resolveApiKey,
   insecureKeyTransport: insecureKeyTransport,
