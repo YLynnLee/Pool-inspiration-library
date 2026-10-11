@@ -2774,6 +2774,9 @@ button.ai-line:focus-visible {
 /* header button faces: each says its state in shape and words, not just colour */
 .cp-pill .cp-pill-icon svg { width: 14px; height: 14px; }
 .cp-pill.is-off { border-style: dashed; border-color: var(--border-strong); color: var(--text); }
+.cp-pill.is-updated { animation: cp-updated 1.4s var(--ease); }
+@keyframes cp-updated { 0%, 40% { box-shadow: 0 0 0 3px var(--accent-glow); border-color: var(--accent); } 100% { box-shadow: none; } }
+@media (prefers-reduced-motion: reduce) { .cp-pill.is-updated { animation: none; } }
 .cp-pill.is-warn { border-color: rgba(245, 166, 35, 0.55); background: rgba(245, 166, 35, 0.12); color: var(--draft); }
 .cp-pill.is-warn:hover { background: rgba(245, 166, 35, 0.18); }
 .cp-pill.is-warn .ai-label { color: inherit; }

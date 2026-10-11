@@ -97,14 +97,18 @@
     slot.textContent = '';
     var stopped = !cached && served && statusSettled && lastConfig && lastConfig.connection;
     var connection = cached && cached.config.connection;
-    var face = stopped ? 'is-warn' : connection ? 'is-on' : 'is-off';
-    var text = stopped ? 'Pool stopped' : connection ? aiLabel(cached.config) || connection.label : 'Connect AI';
+    var problem = connection && connection.problem;
+    var face = stopped || problem ? 'is-warn' : connection ? 'is-on' : 'is-off';
+    var described = connection && window.LinkStatus.describeAi(cached.config);
+    var text = stopped ? 'Pool stopped'
+      : problem ? ((described && described.name) || connection.label) + ' · ' + problem.short
+      : connection ? aiLabel(cached.config) || connection.label : 'Connect AI';
     var lead = face === 'is-off' ? icon('plus', 'cp-pill-icon') : face === 'is-warn' ? icon('alert', 'cp-pill-icon') : el('span', { class: 'ai-dot', 'aria-hidden': 'true' });
     slot.appendChild(el('button', {
-      class: 'btn btn-secondary cp-pill ' + face,
+      class: 'btn btn-secondary cp-pill ' + face + (pulseHeader ? ' is-updated' : ''),
       type: 'button',
       'aria-haspopup': 'dialog',
-      title: stopped ? 'Pool needs to be running to analyse' : connection ? 'Connected to ' + connection.label : null,
+      title: stopped ? 'Pool needs to be running to analyse' : problem ? problem.title : connection ? 'Connected to ' + connection.label : null,
       onclick: function () { openConnect(); },
     }, [lead, el('span', { class: 'ai-label', text: text })]));
   }
@@ -127,6 +131,8 @@
   // one that can: on failure nothing is saved and the previous model stays.
 
   var modelCheck = { checking: '' };
+  // Set when the model has just changed, so the header button pulses once.
+  var pulseHeader = false;
 
   // The models the connected AI can use: { models: [{ id, label }], free }.
   // Rejects when they can't be listed.
@@ -150,7 +156,9 @@
       return r;
     }).then(function (r) {
       modelCheck.checking = '';
+      pulseHeader = true;
       notify();
+      pulseHeader = false;
       return r;
     }, function (err) {
       modelCheck.checking = '';
@@ -187,7 +195,10 @@
   // keyDraft: an API key being entered, per AI, and what came of checking it.
   // It lives only in memory and is dropped when the window closes.
   // localModel: the model picked per local server, kept across rebuilds.
-  var ui = { selected: null, query: '', method: {}, otherKind: 'agent', tried: {}, keyDraft: {}, localModel: {} };
+  // handoff: set when a connection has just been made or repaired, so the
+  // box offering to analyse shows once and not on every later opening.
+  // modelNotice: the "Now using …" notice after a model change, shown once.
+  var ui = { selected: null, query: '', method: {}, otherKind: 'agent', tried: {}, keyDraft: {}, localModel: {}, disconnected: {}, handoff: false, modelNotice: null };
   var paneSeq = 0; // changes whenever the pane is rebuilt, so late callbacks can tell
 
   function helperUp() {
@@ -247,7 +258,9 @@
 
   // { tone, text } — only ever news about what's here. null when nothing is.
   function statusOf(ai) {
-    if (isConnectedTo(ai.id)) return { tone: 'on', text: 'Connected' };
+    if (isConnectedTo(ai.id)) {
+      return cached.config.connection.problem ? { tone: 'warn', text: 'Needs attention' } : { tone: 'on', text: 'Connected' };
+    }
     var kinds = { agent: null, local: null, key: null };
     ai.methods.forEach(function (m) {
       if (m.id === 'agent' && agentInstalled(m.preset)) kinds.agent = { tone: 'ready', text: 'Installed' };
@@ -347,6 +360,8 @@
     closeModal();
     ui.selected = aiId || null;
     ui.query = '';
+    ui.handoff = false;
+    ui.modelNotice = null;
     // Whatever the page last heard, ask again first: the window opens on the
     // truth (Pool may have stopped since), not on a stale frame.
     var seq = ++openingSeq;
@@ -772,6 +787,7 @@
         throw failed;
       }
       if (options.triedKey) delete ui.tried[options.triedKey];
+      ui.handoff = true;
       if (update.mode === 'agent' && update.agent && update.ai) rememberSignedIn(update.agent.preset, 'yes');
       if (update.api) delete ui.keyDraft[update.ai];
       renderList();
@@ -828,7 +844,7 @@
         slot: installStatus,
       },
       {
-        title: loggedIn ? 'Logged in to ' + m.app : 'Log in to ' + m.app,
+        title: loggedIn ? (ui.disconnected[ai.id] ? 'Still logged in to ' : 'Logged in to ') + m.app : 'Log in to ' + m.app,
         done: loggedIn,
         alsoOpen: !loggedIn,
         handedOff: installed && opened,
@@ -1125,6 +1141,7 @@
     var described = window.LinkStatus.describeAi(config);
     var since = window.UI.timeAgo(connection.at);
     var running = window.LibraryAI.drain.running;
+    if (connection.problem) return repairInto(pane, connection, running);
     var block = el('div', { class: 'cp-connected' });
     block.appendChild(el('div', { class: 'cp-connected-head' }, [
       el('span', { class: 'ai-success-mark cp-ok', 'aria-hidden': 'true' }, [icon('check')]),
@@ -1134,36 +1151,130 @@
       ]),
     ]));
     if (described && described.canChange) modelPicker(block, config, running);
-    block.appendChild(el('div', { class: 'cp-connected-foot' }, [
-      el('button', {
-        class: 'btn btn-secondary btn-sm btn-danger-quiet',
-        type: 'button',
-        text: 'Disconnect',
-        disabled: running,
-        title: running ? 'Stop analysing first' : null,
-        onclick: function () { disconnect(connection.label); },
-      }),
-    ]));
+    if (ui.modelNotice) {
+      var done = statusSlot();
+      window.UI.setNotice(done, 'success', ui.modelNotice);
+      block.appendChild(done);
+      ui.modelNotice = null;
+    }
+    block.appendChild(el('div', { class: 'cp-connected-foot' }, [disconnectButton(connection, running)]));
     pane.appendChild(block);
 
-    var waiting = cached.inbox ? cached.inbox.captures : 0;
-    if (waiting) {
-      pane.appendChild(el('div', { class: 'cp-handoff' }, [
-        el('p', { class: 'cp-handoff-text', text: window.UI.plural(waiting, 'link') + (waiting === 1 ? ' is' : ' are') + ' waiting to be analysed.' }),
-        el('div', { class: 'cp-handoff-actions' }, [
-          el('button', {
-            class: 'btn btn-secondary btn-sm',
-            type: 'button',
-            text: 'Analyse ' + window.UI.plural(waiting, 'link'),
-            disabled: running,
-            onclick: function () {
-              closeModal();
-              startDrain();
-            },
-          }),
-        ]),
-      ]));
+    if (ui.handoff) pane.appendChild(handoffBox(running));
+  }
+
+  // The connection broke (see connection.problem): a warning that says what
+  // happened and how many links wait, then the repair as steps on the same
+  // one-primary rule, and Disconnect for giving up on this AI. A passing
+  // check replaces the connection, which clears the problem and shows the
+  // hand-off (connectWith).
+  function repairInto(pane, connection, running) {
+    var config = cached.config;
+    var problem = connection.problem;
+    var described = window.LinkStatus.describeAi(config);
+    var ai = findAi(connection.ai);
+    var method = ai && ai.methods.find(function (m) { return methodModeIs(m, config.mode); });
+    var app = (method && method.app) || (described && described.name) || connection.label;
+    var block = el('div', { class: 'cp-connected cp-repair is-warn' });
+    var warning = statusSlot();
+    window.UI.setNotice(warning, 'warning', { title: (described ? described.name + ' needs attention' : 'Needs attention'), text: problem.text });
+    block.appendChild(warning);
+
+    var update = { ai: connection.ai, mode: config.mode };
+    if (config.mode === 'agent') update.agent = { preset: config.agent.preset };
+    var checkStatus = statusSlot();
+    var loginStatus = statusSlot();
+    function check(button) {
+      connectWith(update, checkStatus, button, {
+        app: app,
+        onFail: function (err) {
+          var lost = !!(err.result && err.result.loggedOut);
+          if (lost && config.mode === 'agent') rememberSignedIn(config.agent.preset, 'no');
+          setStatus(checkStatus, 'error', lost ? app + ' isn’t logged in yet' : 'Still not working', plainFailure(err.message));
+        },
+      });
     }
+
+    var steps;
+    if (problem.kind === 'logged-out') {
+      steps = [
+        {
+          title: 'Log in to ' + app + ' again',
+          body: [hint('Opens ' + app + ' in a Terminal window. Log in there, then come back.')],
+          actions: [{
+            label: 'Open ' + app + ' to log in',
+            run: terminalRun({ ai: connection.ai, action: 'login' }, loginStatus, function () {
+              loginOpened[connection.ai] = true;
+              renderPane();
+            }),
+          }],
+          handedOff: !!loginOpened[connection.ai],
+          slot: loginStatus,
+        },
+        { title: 'Check again', body: [hint('Pool checks ' + app + ' answers.')], actions: [{ label: 'I’ve logged in — check again', run: check }], slot: checkStatus },
+      ];
+    } else {
+      steps = [{
+        title: 'Check again',
+        body: [hint(problem.kind === 'key-rejected'
+          ? 'If you’ve fixed the key, check again. Or disconnect and paste a new one.'
+          : 'Make sure it’s running, then check again.')],
+        actions: [{ label: 'Check again', run: check }],
+        slot: checkStatus,
+      }];
+    }
+    block.appendChild(stepList(steps));
+    block.appendChild(el('div', { class: 'cp-connected-foot' }, [disconnectButton(connection, running)]));
+    pane.appendChild(block);
+  }
+
+  function disconnectButton(connection, running) {
+    return el('button', {
+      class: 'btn btn-secondary btn-sm btn-danger-quiet',
+      type: 'button',
+      text: 'Disconnect',
+      disabled: running,
+      title: running ? 'Stop analysing first' : null,
+      onclick: function () { disconnect(connection); },
+    });
+  }
+
+  // The end of the journey isn't "Connected", it's "your links are being
+  // analysed": offered in a quieter box under the connection, not instead of
+  // it. Analyse starts the same drain the Add drawer starts and closes the
+  // window; progress shows where it always does.
+  function handoffBox(running) {
+    var waiting = cached.inbox ? cached.inbox.captures : 0;
+    var links = window.UI.plural(waiting, 'link');
+    return el('div', { class: 'cp-handoff' }, [
+      el('p', {
+        class: 'cp-handoff-text',
+        text: waiting ? links + (waiting === 1 ? ' is' : ' are') + ' waiting to be analysed.' : 'Add a link, then press Analyse.',
+      }),
+      el('div', { class: 'cp-handoff-actions' }, waiting ? [
+        el('button', {
+          class: 'btn btn-secondary btn-sm',
+          type: 'button',
+          text: 'Analyse ' + links,
+          disabled: running,
+          onclick: function () {
+            closeModal();
+            startDrain();
+          },
+        }),
+        el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: 'Later', onclick: closeModal }),
+      ] : [
+        el('button', {
+          class: 'btn btn-secondary btn-sm',
+          type: 'button',
+          text: 'Add a link',
+          onclick: function () {
+            closeModal();
+            if (window.openInbox) window.openInbox();
+          },
+        }),
+      ]),
+    ]);
   }
 
   // Picks the model this AI drains with. An agent app gets "its own default"
@@ -1221,8 +1332,9 @@
       var model = chosen();
       save.disabled = true;
       setStatus(status, 'info', agentMode ? 'Checking it answers…' : 'Checking it can see images…', agentMode ? 'This can take up to a minute.' : null);
-      setModel(model).then(function (r) {
-        window.UI.toast(r.message);
+      setModel(model).then(function () {
+        var now = window.LinkStatus.describeAi(cached.config);
+        ui.modelNotice = { title: 'Now using ' + ((now && now.model) || (model ? model : 'its own default model')), text: 'Your next analyses use it.' };
         renderPane();
       }).catch(function (err) {
         if (err.helperDown) return;
@@ -1232,13 +1344,29 @@
     });
   }
 
-  function disconnect(label) {
+  // Clears only the connection. Where the pane lands follows from what the
+  // helper remembers of the login: still logged in → Connect is the primary;
+  // login lost → Open {app} to log in is. The window is left on the way the
+  // collector had connected, so "Connect" means the same thing again.
+  function disconnect(connection) {
+    var config = cached.config;
+    var lost = connection.problem && connection.problem.kind === 'logged-out';
     api('POST', '/api/disconnect', {}).then(function (next) {
+      var ai = findAi(connection.ai);
+      var method = ai && ai.methods.find(function (m) {
+        return methodModeIs(m, config.mode) && (m.id === 'agent' || !m.provider || m.provider === config.api.provider);
+      });
+      if (method) ui.method[ai.id] = method.id;
+      if (config.mode === 'agent') {
+        if (lost) rememberSignedIn(config.agent.preset, 'no');
+        else rememberSignedIn(config.agent.preset, 'yes');
+        ui.disconnected[connection.ai] = true;
+      }
       adopt(next);
       notify();
       renderList();
       renderPane();
-      window.UI.toast('Disconnected from ' + label + '. Your library is unchanged.');
+      window.UI.toast('Disconnected from ' + connection.label + '. Your library is unchanged.');
     }, function (err) {
       if (err.helperDown) return;
       window.UI.toast('Couldn’t disconnect: ' + err.message);

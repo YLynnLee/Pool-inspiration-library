@@ -150,10 +150,13 @@ function serveStatic(req, res, pathname) {
 //
 // createServer({ ai }) builds the helper without starting it. `ai` is the AI
 // layer (scripts/ai/index.js, plus loadConfig); the real one is the default, so
-// "Start Pool" and `npm start` behave as always. Tests pass a fake.
+// "Start Pool" and `npm start` behave as always. Tests pass a fake. `inbox`
+// likewise replaces the reading of inbox.md (a function returning what
+// inboxStatus() does), so a test chooses how many links are waiting.
 
 function createServer(options) {
   var ai = (options && options.ai) || realAi;
+  var readInbox = (options && options.inbox) || inboxStatus;
   var allowedHosts = [];
 
   // ---- drain job (one at a time) --------------------------------------------
@@ -178,7 +181,7 @@ function createServer(options) {
       if (current.lines.length > MAX_LOG_LINES) current.lines.shift();
       broadcast('line', line);
     };
-    ai.runDrain(config, { url: url || undefined, log: log, signal: current.controller.signal })
+    ai.runDrain(config, { url: url || undefined, log: log, signal: current.controller.signal, remaining: function () { return readInbox().captures; } })
       .then(function (outcome) {
         current.ok = outcome.code === undefined || outcome.code === 0;
       }, function (err) {
@@ -208,7 +211,7 @@ function createServer(options) {
         }),
       },
       catalog: catalog.publicCatalog(),
-      inbox: inboxStatus(),
+      inbox: readInbox(),
       job: jobSummary(),
     };
   }

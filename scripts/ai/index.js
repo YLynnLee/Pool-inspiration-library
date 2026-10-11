@@ -215,7 +215,11 @@ async function connect(update, storage) {
   if (!result.ok) return result;
   var label = configModule.connectionLabel(draft);
   if (draft.mode === 'agent' && result.model) label += ' · ' + result.model;
-  draft.connection = { label: label, ai: typeof update.ai === 'string' ? update.ai : null, at: new Date().toISOString() };
+  // Changing model on the same AI keeps "connected since" as it was.
+  var aiId = typeof update.ai === 'string' ? update.ai : null;
+  var previous = configModule.loadConfig(storage).connection;
+  var since = previous && aiId && previous.ai === aiId && previous.at ? previous.at : new Date().toISOString();
+  draft.connection = { label: label, ai: aiId, at: since };
   configModule.saveConfig(draft, storage);
   return { ok: true, message: 'Connected to ' + draft.connection.label + '.' };
 }
@@ -241,7 +245,7 @@ function disconnect(storage) {
   configModule.saveConfig(config, storage);
 }
 
-// options: { url?, log(line), signal? }
+// options: { url?, log(line), signal?, remaining?() }
 async function runDrain(config, options) {
   var problems = configModule.configProblems(config);
   if (problems.length) throw new Error(problems.join(' '));
@@ -252,6 +256,70 @@ async function runDrain(config, options) {
   return apiDrain.runApiDrain(Object.assign({ api: config.api }, options));
 }
 
+// The words for each kind of connection-level failure. `short` goes in the
+// header, `title` is its tooltip, `text` is the pane's warning (with how many
+// links are still waiting added). None of it quotes the agent's or API's own
+// output, so a key can't end up here.
+var PROBLEM_KINDS = {
+  'logged-out': { short: 'logged out', title: function (who) { return who + ' is logged out. Log in again to keep analysing.'; }, text: function (who) { return who + ' logged out while analysing.'; } },
+  'key-rejected': { short: 'key not working', title: function (who) { return 'The key for ' + who + ' isn’t working. Check it, or connect another AI.'; }, text: function (who) { return 'The key for ' + who + ' stopped working while analysing.'; } },
+  'not-answering': { short: 'not answering', title: function (who) { return who + ' isn’t answering. Check it is running, then check again.'; }, text: function (who) { return who + ' stopped answering while analysing.'; } },
+};
+
+function waitingText(count) {
+  if (!(count > 0)) return '';
+  return ' ' + (count === 1 ? '1 link is' : count + ' links are') + ' still waiting.';
+}
+
+function buildProblem(kind, who, waiting) {
+  var words = PROBLEM_KINDS[kind];
+  return { kind: kind, short: words.short, title: words.title(who), text: words.text(who) + waitingText(waiting), at: new Date().toISOString() };
+}
+
+// Which connection-level failure a stopped drain amounts to, or null. One
+// link failing to capture is not one: that leaves the connection alone.
+function connectionFailure(config, outcome, text) {
+  if (config.mode === 'agent') {
+    var stopped = outcome && outcome.code !== undefined && outcome.code !== 0;
+    return stopped && catalog.looksLoggedOut(config.agent.preset, text) ? 'logged-out' : null;
+  }
+  // Links that never reached the model (a duplicate, a site that wouldn't
+  // load) say nothing about the connection. If any link that did reach it
+  // went through, the connection works and the rest failed on their own.
+  var reached = ((outcome && outcome.outcomes) || []).filter(function (o) { return o.kind !== 'duplicate' && o.kind !== 'fetch-failed'; });
+  if (!reached.length || reached.some(function (o) { return o.kind !== 'error'; })) return null;
+  var reasons = reached.map(function (o) { return String(o.reason || ''); });
+  if (reasons.some(function (r) { return /\bHTTP (401|403)\b|key was not accepted/i.test(r); })) return 'key-rejected';
+  if (reasons.some(function (r) { return /could not reach/i.test(r); })) return 'not-answering';
+  return null;
+}
+
+// A drain, and afterwards a record of why it stopped when the connection
+// itself was the reason, kept on the connection for the header and window.
+async function runDrainRecording(config, options, storage) {
+  var tail = [];
+  var wrapped = Object.assign({}, options, {
+    log: function (line) {
+      tail.push(line);
+      if (tail.length > 40) tail.shift();
+      options.log(line);
+    },
+  });
+  var outcome = await runDrain(config, wrapped);
+  var aborted = options.signal && options.signal.aborted;
+  var kind = aborted ? null : connectionFailure(config, outcome, tail.join('\n'));
+  if (kind) {
+    var saved = configModule.loadConfig(storage);
+    if (saved.connection) {
+      var waiting = typeof options.remaining === 'function' ? options.remaining() : 0;
+      saved.connection.problem = buildProblem(kind, configModule.connectionLabel(saved), waiting);
+      if (kind === 'logged-out' && saved.mode === 'agent') saved = configModule.recordLogin(saved, saved.agent.preset, 'loggedOut');
+      configModule.saveConfig(saved, storage);
+    }
+  }
+  return outcome;
+}
+
 // The helper's AI layer. `storage` ({ file, store }) says where the config and
 // its keys live; the tests point it at a temp directory. The default layer,
 // exported below, uses .drain.config.json and the OS secret store.
@@ -259,7 +327,7 @@ function create(storage) {
   return {
     loadConfig: function () { return configModule.loadConfig(storage); },
     testConnection: testConnection,
-    runDrain: runDrain,
+    runDrain: function (config, options) { return runDrainRecording(config, options, storage); },
     detect: function (options) { return detect(options, storage); },
     models: function (update) { return models(update, storage); },
     connect: function (update) { return connect(update, storage); },

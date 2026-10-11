@@ -7,6 +7,7 @@
 //
 // `app.stopHelper()` makes the helper go away, as when its Terminal closes;
 // `app.startHelper()` brings it back on the same port, as Start Pool does.
+// `options.inbox` is a function giving the inbox status (how many links wait).
 // `options.viewport` sets the page size (default 1280×800).
 
 var createServer = require('../../scripts/server.js').createServer;
@@ -28,7 +29,7 @@ async function launchBrowser() {
 }
 
 async function startApp(options) {
-  var helper = createServer({ ai: options.ai });
+  var helper = createServer({ ai: options.ai, inbox: options.inbox });
   var port = await helper.listen(0);
   var running = true;
   var browser;
@@ -51,7 +52,7 @@ async function startApp(options) {
     },
     startHelper: async function () {
       if (running) return;
-      helper = createServer({ ai: options.ai });
+      helper = createServer({ ai: options.ai, inbox: options.inbox });
       await helper.listen(port);
       running = true;
     },
