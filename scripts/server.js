@@ -16,7 +16,7 @@ var http = require('http');
 var path = require('path');
 var childProcess = require('child_process');
 var configModule = require('./ai/config.js');
-var ai = require('./ai/index.js');
+var realAi = require('./ai/index.js');
 var lib = require('./drain-lib.js');
 var catalog = require('./ai/catalog.js');
 var curation = require('../js/curation.js');
@@ -49,47 +49,6 @@ function parseArgs(argv) {
   return opts;
 }
 
-var opts = parseArgs(process.argv.slice(2));
-var ALLOWED_HOSTS = ['127.0.0.1:' + opts.port, 'localhost:' + opts.port];
-
-// ---- drain job (one at a time) --------------------------------------------
-
-var job = null;
-
-function jobSummary() {
-  if (!job) return null;
-  return { id: job.id, running: job.running, startedAt: job.startedAt, finishedAt: job.finishedAt, ok: job.ok, lines: job.lines.length };
-}
-
-function broadcast(event, data) {
-  var frame = 'event: ' + event + '\ndata: ' + JSON.stringify(data) + '\n\n';
-  job.clients.forEach(function (res) { res.write(frame); });
-}
-
-function startJob(config, url) {
-  job = { id: Date.now().toString(36), running: true, startedAt: new Date().toISOString(), lines: [], clients: new Set(), controller: new AbortController() };
-  var current = job;
-  var log = function (line) {
-    current.lines.push(line);
-    if (current.lines.length > MAX_LOG_LINES) current.lines.shift();
-    broadcast('line', line);
-  };
-  ai.runDrain(config, { url: url || undefined, log: log, signal: current.controller.signal })
-    .then(function (outcome) {
-      current.ok = outcome.code === undefined || outcome.code === 0;
-    }, function (err) {
-      log('Error: ' + err.message);
-      current.ok = false;
-    })
-    .then(function () {
-      current.running = false;
-      current.finishedAt = new Date().toISOString();
-      broadcast('end', { ok: current.ok });
-      current.clients.forEach(function (res) { res.end(); });
-      current.clients.clear();
-    });
-}
-
 // ---- helpers ----------------------------------------------------------------
 
 function inboxStatus() {
@@ -104,25 +63,6 @@ function inboxStatus() {
     items: listed.captures.map(function (c) {
       return { url: c.url, note: c.note, line: c.line, duplicate: c.duplicate };
     }),
-  };
-}
-
-function status() {
-  var config = configModule.loadConfig();
-  return {
-    helper: true,
-    config: configModule.publicConfig(config),
-    problems: configModule.configProblems(config),
-    keyStore: configModule.keyStoreLabel(),
-    presets: {
-      agents: configModule.AGENT_PRESETS,
-      providers: configModule.API_PROVIDERS.map(function (p) {
-        return { id: p.id, label: p.label, baseUrl: p.baseUrl, model: p.model, needsKey: p.needsKey, keyEnv: p.keyEnv };
-      }),
-    },
-    catalog: catalog.publicCatalog(),
-    inbox: inboxStatus(),
-    job: jobSummary(),
   };
 }
 
@@ -180,113 +120,6 @@ function deleteImages(paths) {
   return failed;
 }
 
-async function handleFiles(req, res, pathname) {
-  var body = await readBody(req, 20e6);
-  if (pathname === '/api/files/inbox') {
-    if (typeof body.url !== 'string' || !body.url.trim()) return send(res, 400, { error: 'A URL is required.' });
-    var inboxFile = path.join(ROOT, 'inbox.md');
-    var existing = fs.existsSync(inboxFile) ? fs.readFileSync(inboxFile, 'utf8') : '';
-    writeAtomic('inbox.md', curation.appendCaptureLine(existing, body.url, typeof body.note === 'string' ? body.note : ''));
-    return send(res, 200, { ok: true });
-  }
-  if (pathname === '/api/files/inbox-remove') {
-    if (typeof body.line !== 'string' || !body.line.trim()) return send(res, 400, { error: 'Which link? A line is required.' });
-    if (job && job.running) return send(res, 409, { error: 'Wait for analysing to finish before removing links.' });
-    var inboxPath = path.join(ROOT, 'inbox.md');
-    var current = fs.existsSync(inboxPath) ? fs.readFileSync(inboxPath, 'utf8') : '';
-    var next = curation.removeCaptureLine(current, body.line);
-    if (next === current) return send(res, 410, { error: 'That link is no longer waiting.' });
-    writeAtomic('inbox.md', next);
-    return send(res, 200, { ok: true });
-  }
-  if (pathname === '/api/files/write') {
-    if (WRITABLE.indexOf(body.file) === -1 || typeof body.text !== 'string') return send(res, 400, { error: 'The app can only write ' + WRITABLE.join(' and ') + '.' });
-    writeAtomic(body.file, body.text);
-    return send(res, 200, { ok: true });
-  }
-  if (pathname === '/api/files/delete-images') {
-    return send(res, 200, { failed: deleteImages(body.paths) });
-  }
-  return send(res, 404, { error: 'no such endpoint' });
-}
-
-// ---- API --------------------------------------------------------------------
-
-function guard(req) {
-  if (ALLOWED_HOSTS.indexOf(req.headers.host) === -1) return 'bad host';
-  if (req.method !== 'GET') {
-    var origin = req.headers.origin;
-    if (!origin || ALLOWED_HOSTS.indexOf(origin.replace(/^http:\/\//, '')) === -1 || origin.indexOf('http://') !== 0) return 'bad origin';
-    if (!/^application\/json/.test(req.headers['content-type'] || '')) return 'content-type must be application/json';
-  }
-  return null;
-}
-
-async function handleApi(req, res, pathname) {
-  var refused = guard(req);
-  if (refused) return send(res, 403, { error: refused });
-
-  if (req.method === 'GET' && pathname === '/api/status') return send(res, 200, status());
-
-  if (req.method === 'POST' && pathname.indexOf('/api/files/') === 0) return handleFiles(req, res, pathname);
-
-  if (req.method === 'GET' && pathname === '/api/detect') {
-    return send(res, 200, await ai.detect({ fresh: new URL(req.url, 'http://localhost').searchParams.get('fresh') === '1' }));
-  }
-
-  if (req.method === 'POST' && pathname === '/api/models') {
-    try {
-      return send(res, 200, await ai.models(await readBody(req)));
-    } catch (e) {
-      return send(res, 400, { error: e.message });
-    }
-  }
-
-  if (req.method === 'POST' && pathname === '/api/connect') {
-    var result = await ai.connect(await readBody(req));
-    return send(res, 200, Object.assign(result, { status: status() }));
-  }
-
-  if (req.method === 'POST' && pathname === '/api/terminal') {
-    return send(res, 200, await ai.runTerminalAction(await readBody(req)));
-  }
-
-  if (req.method === 'POST' && pathname === '/api/disconnect') {
-    ai.disconnect();
-    return send(res, 200, status());
-  }
-
-  if (req.method === 'POST' && pathname === '/api/drain') {
-    if (job && job.running) return send(res, 409, { error: 'Analysing is already running.' });
-    var body = await readBody(req);
-    var config = configModule.loadConfig();
-    if (!config.connection) return send(res, 400, { error: 'Connect an AI first.' });
-    startJob(config, typeof body.url === 'string' ? body.url.trim() : '');
-    return send(res, 202, { job: jobSummary() });
-  }
-
-  if (req.method === 'POST' && pathname === '/api/drain/stop') {
-    if (job && job.running) job.controller.abort();
-    return send(res, 200, { job: jobSummary() });
-  }
-
-  if (req.method === 'GET' && pathname === '/api/drain/events') {
-    if (!job) return send(res, 404, { error: 'Nothing has been analysed yet.' });
-    res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
-    job.lines.forEach(function (line) { res.write('event: line\ndata: ' + JSON.stringify(line) + '\n\n'); });
-    if (!job.running) {
-      res.write('event: end\ndata: ' + JSON.stringify({ ok: job.ok }) + '\n\n');
-      return res.end();
-    }
-    job.clients.add(res);
-    var current = job;
-    req.on('close', function () { current.clients.delete(res); });
-    return;
-  }
-
-  send(res, 404, { error: 'no such endpoint' });
-}
-
 // ---- static -----------------------------------------------------------------
 
 function serveStatic(req, res, pathname) {
@@ -313,65 +146,275 @@ function serveStatic(req, res, pathname) {
   });
 }
 
-var server = http.createServer(function (req, res) {
-  var pathname = new URL(req.url, 'http://localhost').pathname;
-  if (pathname.indexOf('/api/') === 0) {
-    handleApi(req, res, pathname).catch(function (err) {
-      if (!res.headersSent) send(res, 500, { error: err.message });
-    });
-  } else if (req.method === 'GET' || req.method === 'HEAD') {
-    serveStatic(req, res, pathname);
-  } else {
-    res.writeHead(405);
-    res.end();
+// ---- the server -------------------------------------------------------------
+//
+// createServer({ ai }) builds the helper without starting it. `ai` is the AI
+// layer (scripts/ai/index.js, plus loadConfig); the real one is the default, so
+// "Start Pool" and `npm start` behave as always. Tests pass a fake.
+
+function createServer(options) {
+  var ai = (options && options.ai) || realAi;
+  var allowedHosts = [];
+
+  // ---- drain job (one at a time) --------------------------------------------
+
+  var job = null;
+
+  function jobSummary() {
+    if (!job) return null;
+    return { id: job.id, running: job.running, startedAt: job.startedAt, finishedAt: job.finishedAt, ok: job.ok, lines: job.lines.length };
   }
-});
 
-var APP_URL = 'http://localhost:' + opts.port + '/';
-
-function openWithDefault() {
-  var opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
-  childProcess.spawn(opener, [APP_URL], { stdio: 'ignore', detached: true }).unref();
-}
-
-// Chrome first on macOS: saving and the design-system download lean on
-// Chrome's file APIs. Falls back to the default browser when it isn't installed.
-function openApp() {
-  if (process.platform !== 'darwin') return openWithDefault();
-  var chrome = childProcess.spawn('open', ['-a', 'Google Chrome', APP_URL], { stdio: 'ignore' });
-  chrome.on('error', openWithDefault);
-  chrome.on('exit', function (code) {
-    if (code !== 0) openWithDefault();
-  });
-}
-
-ai.refreshPath();
-
-server.listen(opts.port, '127.0.0.1', function () {
-  console.log('Pool is running at ' + APP_URL);
-  console.log('Click Connect AI in the app. Ctrl+C (or closing this window) stops it.');
-  if (opts.open) openApp();
-});
-
-// A second double-click on the launcher finds the helper already running:
-// just open the app instead of failing on the busy port.
-server.on('error', function (err) {
-  if (err.code !== 'EADDRINUSE') {
-    console.error(err.message);
-    process.exitCode = 1;
-    return;
+  function broadcast(event, data) {
+    var frame = 'event: ' + event + '\ndata: ' + JSON.stringify(data) + '\n\n';
+    job.clients.forEach(function (res) { res.write(frame); });
   }
-  http.get({ host: '127.0.0.1', port: opts.port, path: '/api/status', headers: { host: 'localhost:' + opts.port } }, function (res) {
-    res.resume();
-    if (res.statusCode === 200) {
-      console.log('Pool is already running at ' + APP_URL);
-      if (opts.open) openApp();
+
+  function startJob(config, url) {
+    job = { id: Date.now().toString(36), running: true, startedAt: new Date().toISOString(), lines: [], clients: new Set(), controller: new AbortController() };
+    var current = job;
+    var log = function (line) {
+      current.lines.push(line);
+      if (current.lines.length > MAX_LOG_LINES) current.lines.shift();
+      broadcast('line', line);
+    };
+    ai.runDrain(config, { url: url || undefined, log: log, signal: current.controller.signal })
+      .then(function (outcome) {
+        current.ok = outcome.code === undefined || outcome.code === 0;
+      }, function (err) {
+        log('Error: ' + err.message);
+        current.ok = false;
+      })
+      .then(function () {
+        current.running = false;
+        current.finishedAt = new Date().toISOString();
+        broadcast('end', { ok: current.ok });
+        current.clients.forEach(function (res) { res.end(); });
+        current.clients.clear();
+      });
+  }
+
+  function status() {
+    var config = ai.loadConfig();
+    return {
+      helper: true,
+      config: configModule.publicConfig(config),
+      problems: configModule.configProblems(config),
+      keyStore: configModule.keyStoreLabel(),
+      presets: {
+        agents: configModule.AGENT_PRESETS,
+        providers: configModule.API_PROVIDERS.map(function (p) {
+          return { id: p.id, label: p.label, baseUrl: p.baseUrl, model: p.model, needsKey: p.needsKey, keyEnv: p.keyEnv };
+        }),
+      },
+      catalog: catalog.publicCatalog(),
+      inbox: inboxStatus(),
+      job: jobSummary(),
+    };
+  }
+
+  async function handleFiles(req, res, pathname) {
+    var body = await readBody(req, 20e6);
+    if (pathname === '/api/files/inbox') {
+      if (typeof body.url !== 'string' || !body.url.trim()) return send(res, 400, { error: 'A URL is required.' });
+      var inboxFile = path.join(ROOT, 'inbox.md');
+      var existing = fs.existsSync(inboxFile) ? fs.readFileSync(inboxFile, 'utf8') : '';
+      writeAtomic('inbox.md', curation.appendCaptureLine(existing, body.url, typeof body.note === 'string' ? body.note : ''));
+      return send(res, 200, { ok: true });
+    }
+    if (pathname === '/api/files/inbox-remove') {
+      if (typeof body.line !== 'string' || !body.line.trim()) return send(res, 400, { error: 'Which link? A line is required.' });
+      if (job && job.running) return send(res, 409, { error: 'Wait for analysing to finish before removing links.' });
+      var inboxPath = path.join(ROOT, 'inbox.md');
+      var current = fs.existsSync(inboxPath) ? fs.readFileSync(inboxPath, 'utf8') : '';
+      var next = curation.removeCaptureLine(current, body.line);
+      if (next === current) return send(res, 410, { error: 'That link is no longer waiting.' });
+      writeAtomic('inbox.md', next);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname === '/api/files/write') {
+      if (WRITABLE.indexOf(body.file) === -1 || typeof body.text !== 'string') return send(res, 400, { error: 'The app can only write ' + WRITABLE.join(' and ') + '.' });
+      writeAtomic(body.file, body.text);
+      return send(res, 200, { ok: true });
+    }
+    if (pathname === '/api/files/delete-images') {
+      return send(res, 200, { failed: deleteImages(body.paths) });
+    }
+    return send(res, 404, { error: 'no such endpoint' });
+  }
+
+  // ---- API --------------------------------------------------------------------
+
+  function guard(req) {
+    if (allowedHosts.indexOf(req.headers.host) === -1) return 'bad host';
+    if (req.method !== 'GET') {
+      var origin = req.headers.origin;
+      if (!origin || allowedHosts.indexOf(origin.replace(/^http:\/\//, '')) === -1 || origin.indexOf('http://') !== 0) return 'bad origin';
+      if (!/^application\/json/.test(req.headers['content-type'] || '')) return 'content-type must be application/json';
+    }
+    return null;
+  }
+
+  async function handleApi(req, res, pathname) {
+    var refused = guard(req);
+    if (refused) return send(res, 403, { error: refused });
+
+    if (req.method === 'GET' && pathname === '/api/status') return send(res, 200, status());
+
+    if (req.method === 'POST' && pathname.indexOf('/api/files/') === 0) return handleFiles(req, res, pathname);
+
+    if (req.method === 'GET' && pathname === '/api/detect') {
+      return send(res, 200, await ai.detect({ fresh: new URL(req.url, 'http://localhost').searchParams.get('fresh') === '1' }));
+    }
+
+    if (req.method === 'POST' && pathname === '/api/models') {
+      try {
+        return send(res, 200, await ai.models(await readBody(req)));
+      } catch (e) {
+        return send(res, 400, { error: e.message });
+      }
+    }
+
+    if (req.method === 'POST' && pathname === '/api/connect') {
+      var result = await ai.connect(await readBody(req));
+      return send(res, 200, Object.assign(result, { status: status() }));
+    }
+
+    if (req.method === 'POST' && pathname === '/api/terminal') {
+      return send(res, 200, await ai.runTerminalAction(await readBody(req)));
+    }
+
+    if (req.method === 'POST' && pathname === '/api/disconnect') {
+      ai.disconnect();
+      return send(res, 200, status());
+    }
+
+    if (req.method === 'POST' && pathname === '/api/drain') {
+      if (job && job.running) return send(res, 409, { error: 'Analysing is already running.' });
+      var body = await readBody(req);
+      var config = ai.loadConfig();
+      if (!config.connection) return send(res, 400, { error: 'Connect an AI first.' });
+      startJob(config, typeof body.url === 'string' ? body.url.trim() : '');
+      return send(res, 202, { job: jobSummary() });
+    }
+
+    if (req.method === 'POST' && pathname === '/api/drain/stop') {
+      if (job && job.running) job.controller.abort();
+      return send(res, 200, { job: jobSummary() });
+    }
+
+    if (req.method === 'GET' && pathname === '/api/drain/events') {
+      if (!job) return send(res, 404, { error: 'Nothing has been analysed yet.' });
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
+      job.lines.forEach(function (line) { res.write('event: line\ndata: ' + JSON.stringify(line) + '\n\n'); });
+      if (!job.running) {
+        res.write('event: end\ndata: ' + JSON.stringify({ ok: job.ok }) + '\n\n');
+        return res.end();
+      }
+      job.clients.add(res);
+      var current = job;
+      req.on('close', function () { current.clients.delete(res); });
+      return;
+    }
+
+    send(res, 404, { error: 'no such endpoint' });
+  }
+
+  var server = http.createServer(function (req, res) {
+    var pathname = new URL(req.url, 'http://localhost').pathname;
+    if (pathname.indexOf('/api/') === 0) {
+      handleApi(req, res, pathname).catch(function (err) {
+        if (!res.headersSent) send(res, 500, { error: err.message });
+      });
+    } else if (req.method === 'GET' || req.method === 'HEAD') {
+      serveStatic(req, res, pathname);
     } else {
+      res.writeHead(405);
+      res.end();
+    }
+  });
+
+  return {
+    // Listens on 127.0.0.1; port 0 picks a free one. Resolves with the port.
+    listen: function (port) {
+      return new Promise(function (resolve, reject) {
+        server.once('error', reject);
+        server.listen(port, '127.0.0.1', function () {
+          server.removeListener('error', reject);
+          var actual = server.address().port;
+          allowedHosts = ['127.0.0.1:' + actual, 'localhost:' + actual];
+          resolve(actual);
+        });
+      });
+    },
+    close: function () {
+      return new Promise(function (resolve) {
+        server.close(function () { resolve(); });
+        if (server.closeAllConnections) server.closeAllConnections();
+      });
+    },
+  };
+}
+
+// ---- command line -----------------------------------------------------------
+
+function main() {
+  var opts = parseArgs(process.argv.slice(2));
+  var helper = createServer();
+  var APP_URL = 'http://localhost:' + opts.port + '/';
+
+  function openWithDefault() {
+    var opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
+    childProcess.spawn(opener, [APP_URL], { stdio: 'ignore', detached: true }).unref();
+  }
+
+  // Chrome first on macOS: saving and the design-system download lean on
+  // Chrome's file APIs. Falls back to the default browser when it isn't installed.
+  function openApp() {
+    if (process.platform !== 'darwin') return openWithDefault();
+    var chrome = childProcess.spawn('open', ['-a', 'Google Chrome', APP_URL], { stdio: 'ignore' });
+    chrome.on('error', openWithDefault);
+    chrome.on('exit', function (code) {
+      if (code !== 0) openWithDefault();
+    });
+  }
+
+  realAi.refreshPath();
+
+  // A second double-click on the launcher finds the helper already running:
+  // just open the app instead of failing on the busy port.
+  function onListenError(err) {
+    if (err.code !== 'EADDRINUSE') {
+      console.error(err.message);
+      process.exitCode = 1;
+      return;
+    }
+    http.get({ host: '127.0.0.1', port: opts.port, path: '/api/status', headers: { host: 'localhost:' + opts.port } }, function (res) {
+      res.resume();
+      if (res.statusCode === 200) {
+        console.log('Pool is already running at ' + APP_URL);
+        if (opts.open) openApp();
+      } else {
+        console.error('Port ' + opts.port + ' is used by another program — try `node scripts/server.js --port 4848`.');
+        process.exitCode = 1;
+      }
+    }).on('error', function () {
       console.error('Port ' + opts.port + ' is used by another program — try `node scripts/server.js --port 4848`.');
       process.exitCode = 1;
-    }
-  }).on('error', function () {
-    console.error('Port ' + opts.port + ' is used by another program — try `node scripts/server.js --port 4848`.');
-    process.exitCode = 1;
-  });
-});
+    });
+  }
+
+  helper.listen(opts.port).then(function () {
+    console.log('Pool is running at ' + APP_URL);
+    console.log('Click Connect AI in the app. Ctrl+C (or closing this window) stops it.');
+    if (opts.open) openApp();
+    helper.server.on('error', function (err) {
+      console.error(err.message);
+      process.exitCode = 1;
+    });
+  }, onListenError);
+}
+
+if (require.main === module) main();
+
+module.exports = { createServer: createServer };
