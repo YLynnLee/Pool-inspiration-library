@@ -639,3 +639,266 @@ test('Something else: an answer about money is replaced with plain advice', asyn
     await assertOnePrimary(app, 'Try again');
   });
 });
+
+// ---- connected, disconnect and a connection that breaks --------------------
+
+const waiting = (n) => () => ({ captures: n, duplicates: 0, malformed: 0, urls: [], items: [] });
+
+test('after connecting: the connection, then a separate hand-off box — and no "Setup steps"', async (t) => {
+  const fake = createFakeAi({ detect: claudeApp(true, 'yes'), connect: { ok: true, message: 'Connected.', label: 'Claude Code · Sonnet 5.5' } });
+  await withApp(t, { ai: fake, inbox: waiting(3) }, async (app) => {
+    await openWindow(app);
+    await waitForPane(app, 'Claude');
+    await buttonNamed(app, 'Connect').click();
+    const connection = dialog(app).locator('.cp-connected');
+    await connection.waitFor({ timeout: 5000 });
+    assert.match(await connection.innerText(), /Connected · Claude Code · Sonnet 5\.5/);
+    assert.equal(await dialog(app).getByText(/Setup steps/i).count(), 0);
+    const box = dialog(app).locator('.cp-handoff');
+    assert.equal(await connection.locator('.cp-handoff').count(), 0, 'the box sits under the connection, not inside it');
+    assert.match(await box.innerText(), /3 links are waiting to be analysed\./);
+    assert.deepEqual((await box.getByRole('button').allInnerTexts()).map((s) => s.trim()), ['Analyse 3 links', 'Later']);
+  });
+});
+
+async function connectClaude(app) {
+  await openWindow(app);
+  await waitForPane(app, 'Claude');
+  await buttonNamed(app, 'Connect').click();
+  await dialog(app).locator('.cp-connected').waitFor({ timeout: 5000 });
+}
+
+const CLAUDE_CONNECTS = { detect: claudeApp(true, 'yes'), connect: { ok: true, message: 'Connected.', label: 'Claude Code · Sonnet 5.5' } };
+
+test('hand-off: Analyse closes the window and starts the drain', async (t) => {
+  const fake = createFakeAi(CLAUDE_CONNECTS);
+  await withApp(t, { ai: fake, inbox: waiting(2) }, async (app) => {
+    await connectClaude(app);
+    await buttonNamed(app, 'Analyse 2 links').click();
+    await dialog(app).waitFor({ state: 'detached', timeout: 5000 });
+    await app.page.waitForFunction(() => window.LibraryAI.drain.running || window.LibraryAI.drain.finished, null, { timeout: 5000 });
+    const started = fake.calls.some((c) => c.name === 'runDrain');
+    assert.ok(started, 'the same drain the Add drawer starts');
+  });
+});
+
+test('hand-off: Later closes the window, and opening it again shows no hand-off', async (t) => {
+  const fake = createFakeAi(CLAUDE_CONNECTS);
+  await withApp(t, { ai: fake, inbox: waiting(2) }, async (app) => {
+    await connectClaude(app);
+    await buttonNamed(app, 'Later').click();
+    await dialog(app).waitFor({ state: 'detached', timeout: 5000 });
+    assert.equal(fake.calls.filter((c) => c.name === 'runDrain').length, 0);
+    await openWindow(app);
+    await dialog(app).locator('.cp-connected').waitFor({ timeout: 5000 });
+    assert.equal(await dialog(app).locator('.cp-handoff').count(), 0);
+  });
+});
+
+test('hand-off: with nothing waiting it says to add a link, and Add a link opens the Add drawer', async (t) => {
+  const fake = createFakeAi(CLAUDE_CONNECTS);
+  await withApp(t, { ai: fake, inbox: waiting(0) }, async (app) => {
+    await connectClaude(app);
+    assert.match(await dialog(app).locator('.cp-handoff').innerText(), /Add a link, then press Analyse\./);
+    await buttonNamed(app, 'Add a link').click();
+    await app.page.locator('.cp-modal').waitFor({ state: 'detached', timeout: 5000 });
+    await app.page.locator('.inbox-input').waitFor({ timeout: 5000 });
+  });
+});
+
+// ---- the connected pane ----------------------------------------------------
+
+const MODELS = { models: [{ id: 'sonnet', label: 'Sonnet 5.5' }, { id: 'opus', label: 'Opus 5.5' }], free: false };
+
+async function openConnected(app) {
+  await openWindow(app);
+  await dialog(app).locator('.cp-connected').waitFor({ timeout: 8000 });
+  await dialog(app).locator('select[aria-label="Model"]:not([hidden])').waitFor({ timeout: 5000 });
+}
+
+test('connected: only the connection — model dropdown with the app\'s models and its own default, Use this model only for a different one', async (t) => {
+  const fake = createFakeAi({ detect: claudeApp(true, 'yes'), models: MODELS });
+  fake.setConnection(CLAUDE_ON);
+  await withApp(t, { ai: fake, inbox: waiting(2) }, async (app) => {
+    await openConnected(app);
+    const options = await dialog(app).locator('select[aria-label="Model"] option').allInnerTexts();
+    assert.deepEqual(options.map((s) => s.trim()), ['Its own default', 'Sonnet 5.5', 'Opus 5.5']);
+    assert.equal(await dialog(app).locator('.cp-handoff').count(), 0, 'no hand-off when merely opening the window');
+    assert.equal(await dialog(app).getByText(/Setup steps/i).count(), 0);
+    assert.equal(await buttonNamed(app, 'Use this model').isDisabled(), true, 'nothing changed yet');
+    await dialog(app).locator('select[aria-label="Model"]').selectOption('opus');
+    assert.equal(await buttonNamed(app, 'Use this model').isDisabled(), false);
+  });
+});
+
+test('model change: it re-checks, then shows the success notice once, updates the header and pulses it', async (t) => {
+  const fake = createFakeAi({
+    detect: claudeApp(true, 'yes'),
+    models: MODELS,
+    connect: { ok: true, message: 'Connected.', label: 'Claude · Opus 5.5' },
+  });
+  fake.setConnection(CLAUDE_ON);
+  await withApp(t, { ai: fake }, async (app) => {
+    await openConnected(app);
+    await dialog(app).locator('select[aria-label="Model"]').selectOption('opus');
+    await buttonNamed(app, 'Use this model').click();
+    const notice = dialog(app).locator('.notice.is-success');
+    await notice.waitFor({ timeout: 5000 });
+    assert.match(await notice.innerText(), /Now using Opus 5\.5/);
+    assert.match(await notice.innerText(), /Your next analyses use it\./);
+    assert.deepEqual(fake.calls.filter((c) => c.name === 'connect').pop().arg.agent, { model: 'opus' });
+    await app.page.waitForFunction(() => /Opus 5\.5/.test(document.querySelector('.ai-header').textContent));
+    assert.equal(await header(app).evaluate((b) => b.classList.contains('is-updated')), true, 'the header button pulses');
+    assert.equal(await buttonNamed(app, 'Use this model').isDisabled(), true, 'the new model is the saved one');
+    await app.page.keyboard.press('Escape');
+    await openConnected(app);
+    assert.equal(await dialog(app).locator('.notice.is-success').count(), 0, 'shown once');
+  });
+});
+
+test('model change: a failing check keeps the old model and says so', async (t) => {
+  const fake = createFakeAi({
+    detect: claudeApp(true, 'yes'),
+    models: MODELS,
+    connect: { ok: false, message: 'claude didn’t answer.' },
+  });
+  fake.setConnection(CLAUDE_ON);
+  await withApp(t, { ai: fake }, async (app) => {
+    await openConnected(app);
+    await dialog(app).locator('select[aria-label="Model"]').selectOption('opus');
+    await buttonNamed(app, 'Use this model').click();
+    const notice = dialog(app).locator('.notice.is-error');
+    await notice.waitFor({ timeout: 5000 });
+    assert.match(await notice.innerText(), /previous model/i);
+    assert.equal(await dialog(app).locator('.notice.is-success').count(), 0);
+    assert.match(await header(app).innerText(), /Sonnet 5\.5/);
+    assert.equal(await header(app).evaluate((b) => b.classList.contains('is-updated')), false);
+  });
+});
+
+test('Disconnect is red at rest', async (t) => {
+  const fake = createFakeAi({ detect: claudeApp(true, 'yes'), models: MODELS });
+  fake.setConnection(CLAUDE_ON);
+  await withApp(t, { ai: fake }, async (app) => {
+    await openConnected(app);
+    const colour = await buttonNamed(app, 'Disconnect').evaluate((b) => getComputedStyle(b).color);
+    const [r, g, b] = colour.match(/\d+/g).map(Number);
+    assert.ok(r > 200 && g < 190 && b < 190, 'red text before any hover: ' + colour);
+  });
+});
+
+// ---- disconnect ------------------------------------------------------------
+
+const LOGGED_OUT = {
+  kind: 'logged-out',
+  short: 'logged out',
+  title: 'Claude Code is logged out. Log in again to keep analysing.',
+  text: 'Claude Code logged out while analysing. 3 links are still waiting.',
+  at: new Date().toISOString(),
+};
+
+test('disconnect while signed in: lands on Connect as the primary, login ticked, with a toast', async (t) => {
+  const fake = createFakeAi({ detect: claudeApp(true, 'yes'), models: MODELS });
+  fake.setConnection(CLAUDE_ON);
+  await withApp(t, { ai: fake }, async (app) => {
+    await openConnected(app);
+    await buttonNamed(app, 'Disconnect').click();
+    await assertOnePrimaryEventually(app, 'Connect');
+    assert.match(await dialog(app).innerText(), /Still logged in to Claude Code/);
+    assert.equal(await dialog(app).locator('.cp-connected').count(), 0);
+    assert.match(await app.page.locator('.toast').innerText(), /library is unchanged/i);
+    assert.equal((await header(app).innerText()).trim(), 'Connect AI');
+  });
+});
+
+test('disconnect after the login was lost: lands on Open {app} to log in as the primary', async (t) => {
+  const fake = createFakeAi({ detect: claudeApp(true, 'yes'), models: MODELS });
+  fake.setConnection(Object.assign({}, CLAUDE_ON, { problem: LOGGED_OUT }));
+  await withApp(t, { ai: fake }, async (app) => {
+    await openWindow(app);
+    await dialog(app).locator('.cp-repair').waitFor({ timeout: 8000 });
+    await buttonNamed(app, 'Disconnect').click();
+    await dialog(app).locator('.cp-repair').waitFor({ state: 'detached', timeout: 5000 });
+    await assertOnePrimaryEventually(app, 'Open Claude Code to log in');
+    assert.equal(await buttonNamed(app, 'Connect').count(), 1, 'Connect stays on show, secondary');
+  });
+});
+
+async function assertOnePrimaryEventually(app, label) {
+  await app.page.waitForFunction((l) => {
+    const found = Array.from(document.querySelectorAll('[role=dialog] .btn-primary')).map((b) => b.textContent.trim());
+    return found.length === 1 && found[0] === l;
+  }, label, { timeout: 5000 });
+  await assertOnePrimary(app, label);
+}
+
+// ---- a connection that breaks ----------------------------------------------
+
+test('broken connection: amber header face with words and tooltip, a Needs attention row, a warning, repair steps and a red Disconnect', async (t) => {
+  const fake = createFakeAi({ detect: claudeApp(true, 'no'), models: MODELS });
+  fake.setConnection(Object.assign({}, CLAUDE_ON, { problem: LOGGED_OUT }));
+  await withApp(t, { ai: fake }, async (app) => {
+    await app.page.waitForFunction(() => /logged out/.test(document.querySelector('.ai-header').textContent));
+    assert.equal((await header(app).innerText()).trim(), 'Claude · logged out');
+    assert.equal(await header(app).getAttribute('title'), LOGGED_OUT.title);
+    assert.equal(await header(app).evaluate((b) => b.classList.contains('is-warn')), true);
+    assert.equal(await header(app).locator('svg').count(), 1, 'an alert icon, not colour alone');
+
+    await openWindow(app);
+    await app.page.locator('.cp-row', { hasText: 'Claude' }).first().waitFor({ timeout: 8000 });
+    assert.match(await app.page.locator('.cp-row', { hasText: 'Claude' }).first().innerText(), /Needs attention/);
+
+    const warning = dialog(app).locator('.notice.is-warning');
+    assert.match(await warning.innerText(), /3 links are still waiting/);
+    assert.equal(await dialog(app).locator('.cp-repair .ai-steps-list').count(), 1, 'repair steps sit under the warning');
+    assert.equal(await dialog(app).getByText(/Setup steps/i).count(), 0);
+
+    await assertOnePrimary(app, 'Open Claude Code to log in');
+    assert.equal(await buttonNamed(app, 'I’ve logged in — check again').count(), 1);
+    assert.equal(await buttonNamed(app, 'Disconnect').count(), 1);
+    const colour = await buttonNamed(app, 'Disconnect').evaluate((b) => getComputedStyle(b).color);
+    assert.ok(Number(colour.match(/\d+/g)[0]) > 200, 'Disconnect is red: ' + colour);
+  });
+});
+
+test('repair: opening the app moves the primary to the check; a passing check clears the problem and shows the hand-off', async (t) => {
+  const fake = createFakeAi({
+    detect: claudeApp(true, 'no'),
+    models: MODELS,
+    connect: { ok: false, message: 'claude didn’t answer: “Not logged in”.', loggedOut: true },
+  });
+  fake.setConnection(Object.assign({}, CLAUDE_ON, { problem: LOGGED_OUT }));
+  await withApp(t, { ai: fake, inbox: waiting(3) }, async (app) => {
+    await openWindow(app);
+    await dialog(app).locator('.cp-repair').waitFor({ timeout: 8000 });
+    await buttonNamed(app, 'Open Claude Code to log in').click();
+    await assertOnePrimaryEventually(app, 'I’ve logged in — check again');
+    assert.deepEqual(fake.calls.filter((c) => c.name === 'runTerminalAction').pop().arg, { ai: 'claude', action: 'login' });
+
+    await buttonNamed(app, 'I’ve logged in — check again').click();
+    await dialog(app).locator('.notice.is-error').waitFor({ timeout: 5000 });
+    assert.match(await header(app).innerText(), /logged out/, 'still broken');
+
+    fake.script({ connect: { ok: true, message: 'Connected.', label: 'Claude · Sonnet 5.5' } });
+    await buttonNamed(app, 'I’ve logged in — check again').click();
+    await dialog(app).locator('.cp-handoff').waitFor({ timeout: 5000 });
+    assert.match(await dialog(app).locator('.cp-handoff').innerText(), /3 links are waiting/);
+    assert.equal(await dialog(app).locator('.cp-repair').count(), 0);
+    assert.equal((await header(app).innerText()).trim(), 'Claude · Sonnet 5.5');
+  });
+});
+
+test('broken connection that is not about login: one primary Check again, and Disconnect', async (t) => {
+  const fake = createFakeAi({ detect: claudeApp(true, 'yes'), models: MODELS });
+  fake.setConnection(Object.assign({}, CLAUDE_ON, {
+    problem: { kind: 'not-answering', short: 'not answering', title: 'Claude Code isn’t answering.', text: 'Claude Code stopped answering while analysing. 1 link is still waiting.', at: new Date().toISOString() },
+  }));
+  await withApp(t, { ai: fake }, async (app) => {
+    await app.page.waitForFunction(() => /not answering/.test(document.querySelector('.ai-header').textContent));
+    await openWindow(app);
+    await dialog(app).locator('.cp-repair').waitFor({ timeout: 8000 });
+    await assertOnePrimary(app, 'Check again');
+    assert.match(await dialog(app).locator('.notice.is-warning').innerText(), /1 link is still waiting/);
+    assert.equal(await buttonNamed(app, 'Disconnect').count(), 1);
+  });
+});

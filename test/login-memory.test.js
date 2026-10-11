@@ -122,3 +122,130 @@ test('catalog: every agent app lists the prompts that mean it is logged out', ()
     m.login.patterns.forEach((p) => assert.doesNotThrow(() => new RegExp(p, 'i'), ai.id + ': ' + p));
   }));
 });
+
+// ---- a connection that breaks ---------------------------------------------
+
+async function drain(t, remaining) {
+  const config = t.ai.loadConfig();
+  const lines = [];
+  await t.ai.runDrain(config, { log: (l) => lines.push(l), remaining: () => remaining });
+  return lines;
+}
+
+test('problem: a drain that stops on a login prompt marks the connection logged out, with how many links wait', { skip: SKIP }, async () => {
+  const t = setup();
+  try {
+    t.mode('ok');
+    await t.ai.connect(CONNECT_CLAUDE);
+    assert.equal(t.ai.loadConfig().connection.problem, undefined);
+
+    t.mode('loggedout');
+    await drain(t, 3);
+    const problem = t.ai.loadConfig().connection.problem;
+    assert.equal(problem.kind, 'logged-out');
+    assert.equal(problem.short, 'logged out');
+    assert.ok(problem.title && problem.at);
+    assert.match(problem.text, /3 links/);
+    assert.equal(await t.signedIn(), 'no', 'the login record agrees');
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('problem: an unrelated failure sets none, and a passing connection test clears one', { skip: SKIP }, async () => {
+  const t = setup();
+  try {
+    t.mode('ok');
+    await t.ai.connect(CONNECT_CLAUDE);
+
+    t.mode('broken');
+    await drain(t, 2);
+    assert.equal(t.ai.loadConfig().connection.problem, undefined, 'a link that failed is not a broken connection');
+
+    t.mode('loggedout');
+    await drain(t, 2);
+    assert.equal(t.ai.loadConfig().connection.problem.kind, 'logged-out');
+
+    t.mode('ok');
+    assert.equal((await t.ai.connect(CONNECT_CLAUDE)).ok, true);
+    assert.equal(t.ai.loadConfig().connection.problem, undefined);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('problem: an API drain that is refused or cannot reach the server records key-rejected or not-answering, never the key', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pool-problem-'));
+  const store = secrets.createStore({ backend: 'file', dir: path.join(dir, 'secret-store') });
+  const ai = aiIndex.create({ file: path.join(dir, '.drain.config.json'), store });
+  const apiDrain = require('../scripts/ai/api-drain.js');
+  const original = apiDrain.runApiDrain;
+  const SECRET = 'sk-ant-SECRET-9876';
+  try {
+    config.saveConfig(Object.assign(config.loadConfig({ file: path.join(dir, '.drain.config.json'), store }), {
+      mode: 'api',
+      api: { provider: 'anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-5-5', apiKey: SECRET },
+      connection: { label: 'Anthropic · claude-sonnet-5-5', ai: 'anthropic', at: new Date().toISOString() },
+    }), { file: path.join(dir, '.drain.config.json'), store });
+
+    const cases = [
+      ['HTTP 401: invalid x-api-key ' + SECRET, 'key-rejected', 'key not working'],
+      ['could not reach https://api.anthropic.com/v1/messages: ECONNREFUSED', 'not-answering', 'not answering'],
+    ];
+    for (const [reason, kind, short] of cases) {
+      apiDrain.runApiDrain = async () => ({ outcomes: [{ kind: 'error', url: 'https://a.test', reason }] });
+      await ai.runDrain(ai.loadConfig(), { log() {}, remaining: () => 1 });
+      const problem = ai.loadConfig().connection.problem;
+      assert.equal(problem.kind, kind);
+      assert.equal(problem.short, short);
+      assert.match(problem.text, /1 link is still waiting/);
+      assert.equal(JSON.stringify(config.publicConfig(ai.loadConfig())).includes(SECRET), false, 'the public config never carries the key');
+    }
+
+    apiDrain.runApiDrain = async () => ({ outcomes: [{ kind: 'fetch-failed', url: 'https://a.test', reason: 'timeout' }] });
+    ai.disconnect();
+    assert.equal(ai.loadConfig().connection, null);
+  } finally {
+    apiDrain.runApiDrain = original;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('connection: switching model keeps the "connected since" time', { skip: SKIP }, async () => {
+  const t = setup();
+  try {
+    t.mode('ok');
+    await t.ai.connect(CONNECT_CLAUDE);
+    const first = t.ai.loadConfig().connection.at;
+    await new Promise((r) => setTimeout(r, 15));
+    await t.ai.connect({ ai: 'claude', mode: 'agent', agent: { preset: 'claude', model: 'opus' } });
+    assert.equal(t.ai.loadConfig().connection.at, first);
+  } finally {
+    t.cleanup();
+  }
+});
+
+test('problem: an API drain where some links went through is not a broken connection', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pool-problem-'));
+  const file = path.join(dir, '.drain.config.json');
+  const store = secrets.createStore({ backend: 'file', dir: path.join(dir, 'secret-store') });
+  const ai = aiIndex.create({ file, store });
+  const apiDrain = require('../scripts/ai/api-drain.js');
+  const original = apiDrain.runApiDrain;
+  try {
+    config.saveConfig(Object.assign(config.loadConfig({ file, store }), {
+      mode: 'api',
+      api: { provider: 'anthropic', baseUrl: 'https://api.anthropic.com', model: 'claude-sonnet-5-5', apiKey: 'sk-ant-x' },
+      connection: { label: 'Anthropic · claude-sonnet-5-5', ai: 'anthropic', at: new Date().toISOString() },
+    }), { file, store });
+    apiDrain.runApiDrain = async () => ({ outcomes: [
+      { kind: 'committed', url: 'https://a.test' },
+      { kind: 'error', url: 'https://b.test', reason: 'could not reach https://b.test: ETIMEDOUT' },
+    ] });
+    await ai.runDrain(ai.loadConfig(), { log() {}, remaining: () => 1 });
+    assert.equal(ai.loadConfig().connection.problem, undefined);
+  } finally {
+    apiDrain.runApiDrain = original;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
