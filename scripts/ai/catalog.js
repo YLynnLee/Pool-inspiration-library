@@ -5,6 +5,12 @@
 // tool and an action; the command itself always comes from here. See
 // SECURITY.md.
 //
+// login.patterns: what an app's output says when it isn't logged in (regular
+// expressions, matched without regard to case). The helper reads a failed
+// connection test against these; they live here, next to the login command,
+// because they are as particular to each app as it is. Matching is a
+// heuristic — a miss leaves the login "unknown", never a wrong "logged in".
+//
 // Commands are the tools' own documented ones (checked 2026-09); links go to
 // their docs so a collector can install by hand if a command ever changes.
 
@@ -22,7 +28,7 @@ var CATALOG = [
         needs: 'A Claude Pro, Max, Team or Enterprise plan.',
         docs: 'https://code.claude.com/docs/en/setup',
         install: { unix: 'curl -fsSL https://claude.ai/install.sh | bash', win: 'powershell -NoProfile -Command "irm https://claude.ai/install.ps1 | iex"' },
-        login: { command: 'claude', steps: 'Claude Code opens and sends you to your browser to sign in. When it says you’re logged in, type /exit and close the window.' },
+        login: { command: 'claude', steps: 'Claude Code opens and sends you to your browser to sign in. When it says you’re logged in, type /exit and close the window.', patterns: ['not logged in', 'run /login', 'oauth token has expired', 'please (log|sign) in'] },
       },
       { id: 'key', label: 'API key', provider: 'anthropic', keyUrl: 'https://console.anthropic.com/settings/keys' },
     ],
@@ -40,7 +46,7 @@ var CATALOG = [
         needs: 'A ChatGPT Plus, Pro, Business or Enterprise plan.',
         docs: 'https://github.com/openai/codex',
         install: { unix: 'npm install -g @openai/codex', win: 'npm install -g @openai/codex' },
-        login: { command: 'codex', steps: 'Codex opens. Choose “Sign in with ChatGPT” and finish in your browser, then close the window.' },
+        login: { command: 'codex', steps: 'Codex opens. Choose “Sign in with ChatGPT” and finish in your browser, then close the window.', patterns: ['not logged in', 'codex login', 'please (log|sign) in'] },
       },
       { id: 'key', label: 'API key', provider: 'openai', keyUrl: 'https://platform.openai.com/api-keys' },
     ],
@@ -58,7 +64,7 @@ var CATALOG = [
         needs: 'A Google account.',
         docs: 'https://github.com/google-antigravity/antigravity-cli',
         install: { unix: 'curl -fsSL https://antigravity.google/cli/install.sh | bash', win: 'powershell -NoProfile -Command "irm https://antigravity.google/cli/install.ps1 | iex"' },
-        login: { command: 'agy', steps: 'Antigravity CLI opens and sends you to your browser to sign in with Google. When it says you’re signed in, close the window.' },
+        login: { command: 'agy', steps: 'Antigravity CLI opens and sends you to your browser to sign in with Google. When it says you’re signed in, close the window.', patterns: ['not (logged|signed) in', 'please (log|sign) in', 'authentication required'] },
       },
       { id: 'key', label: 'API key', provider: 'gemini', keyUrl: 'https://aistudio.google.com/apikey' },
     ],
@@ -75,7 +81,7 @@ var CATALOG = [
       needs: 'An account with any provider OpenCode supports.',
       docs: 'https://opencode.ai/docs/',
       install: { unix: 'npm install -g opencode-ai', win: 'npm install -g opencode-ai' },
-      login: { command: 'opencode', steps: 'OpenCode opens. Type /connect, pick your provider and sign in, then close the window.' },
+      login: { command: 'opencode', steps: 'OpenCode opens. Type /connect, pick your provider and sign in, then close the window.', patterns: ['not logged in', 'opencode auth login', 'please (log|sign) in'] },
     }],
   },
   {
@@ -90,7 +96,7 @@ var CATALOG = [
       needs: 'A Claude, ChatGPT or GitHub Copilot subscription, or an API key.',
       docs: 'https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent',
       install: { unix: 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent', win: 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent' },
-      login: { command: 'pi', steps: 'Pi opens. Type /login, choose your subscription and finish in your browser, then close the window.' },
+      login: { command: 'pi', steps: 'Pi opens. Type /login, choose your subscription and finish in your browser, then close the window.', patterns: ['not logged in', 'please (log|sign) in', 'run /login'] },
     }],
   },
   {
@@ -105,7 +111,7 @@ var CATALOG = [
       needs: 'An account with any provider Hermes supports.',
       docs: 'https://hermes-agent.nousresearch.com/docs/',
       install: { unix: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash', win: 'powershell -NoProfile -Command "iex (irm https://hermes-agent.nousresearch.com/install.ps1)"' },
-      login: { command: 'hermes model', steps: 'The Hermes setup wizard opens. Pick a provider and sign in or paste its key, then close the window.' },
+      login: { command: 'hermes model', steps: 'The Hermes setup wizard opens. Pick a provider and sign in or paste its key, then close the window.', patterns: ['not logged in', 'please (log|sign) in'] },
     }],
   },
   {
@@ -148,6 +154,18 @@ function findMethod(aiId, methodId) {
   return method ? { ai: ai, method: method } : null;
 }
 
+// Does this output from an agent app say it isn't logged in?
+function looksLoggedOut(presetId, text) {
+  var found = null;
+  CATALOG.forEach(function (ai) {
+    ai.methods.forEach(function (m) {
+      if (m.id === 'agent' && m.preset === presetId) found = m;
+    });
+  });
+  var patterns = (found && found.login && found.login.patterns) || [];
+  return patterns.some(function (p) { return new RegExp(p, 'i').test(String(text || '')); });
+}
+
 // The only commands the helper will open a Terminal window for: an agent
 // app's install or login, or pulling one of the listed Ollama models.
 function terminalAction(aiId, action, arg, platform) {
@@ -183,4 +201,4 @@ function publicCatalog(platform) {
   });
 }
 
-module.exports = { CATALOG: CATALOG, findMethod: findMethod, terminalAction: terminalAction, publicCatalog: publicCatalog };
+module.exports = { CATALOG: CATALOG, findMethod: findMethod, looksLoggedOut: looksLoggedOut, terminalAction: terminalAction, publicCatalog: publicCatalog };

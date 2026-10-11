@@ -239,3 +239,137 @@ test('phone width: Something else is reachable in the strip', async (t) => {
     assert.equal((await app.page.locator('.cp-pane-title').first().innerText()).trim(), 'Something else');
   });
 });
+
+// ---- connecting through a subscription ------------------------------------
+
+const claudeApp = (installed, signedIn) => ({
+  agents: [{ id: 'claude', label: 'Claude Code', installed, signedIn }],
+  local: [],
+  envKeys: [],
+});
+
+const primaries = (app) => dialog(app).locator('.btn-primary');
+const buttonNamed = (app, name) => dialog(app).getByRole('button', { name, exact: true });
+
+async function waitForPane(app, title) {
+  await app.page.locator('.cp-pane-title', { hasText: title }).first().waitFor({ timeout: 8000 });
+}
+
+async function assertOnePrimary(app, label) {
+  const found = await primaries(app).allInnerTexts();
+  assert.deepEqual(found.map((s) => s.trim()), [label], 'exactly one primary button on screen');
+}
+
+test('subscription: exactly one primary at every step — Install, then Open to log in, then Connect', async (t) => {
+  const fake = createFakeAi({ detect: claudeApp(false, 'unknown') });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openWindow(app);
+    await waitForPane(app, 'Claude');
+    await assertOnePrimary(app, 'Install Claude Code');
+
+    await buttonNamed(app, 'Install Claude Code').click();
+    assert.deepEqual(fake.calls.filter((c) => c.name === 'runTerminalAction').pop().arg, { ai: 'claude', action: 'install' });
+
+    fake.script({ detect: claudeApp(true, 'unknown') });
+    await buttonNamed(app, 'Check again').click();
+    await dialog(app).getByText('Claude Code is installed').waitFor({ timeout: 5000 });
+    await assertOnePrimary(app, 'Open Claude Code to log in');
+
+    await buttonNamed(app, 'Open Claude Code to log in').click();
+    await app.page.waitForFunction(() => /^Connect$/.test((document.querySelector('[role=dialog] .btn-primary') || {}).textContent || ''));
+    await assertOnePrimary(app, 'Connect');
+    assert.deepEqual(fake.calls.filter((c) => c.name === 'runTerminalAction').pop().arg, { ai: 'claude', action: 'login' });
+    assert.equal(await dialog(app).locator('.ai-step[data-step="2"]').evaluate((n) => n.classList.contains('is-done')), false, 'opening the app is not the same as being logged in');
+
+    await buttonNamed(app, 'Connect').click();
+    await dialog(app).getByText(/^Connected/).first().waitFor({ timeout: 5000 });
+  });
+});
+
+test('subscription: installed but not known to be logged in — log in is primary and Connect stays beside it, secondary', async (t) => {
+  for (const signedIn of ['unknown', 'no']) {
+    const fake = createFakeAi({ detect: claudeApp(true, signedIn) });
+    await withApp(t, { ai: fake }, async (app) => {
+      await openWindow(app);
+      await waitForPane(app, 'Claude');
+      await assertOnePrimary(app, 'Open Claude Code to log in');
+      const text = await dialog(app).innerText();
+      assert.match(text, /Claude Pro, Max, Team or Enterprise/, 'says what plan it needs');
+      assert.match(text, /Already logged in\? Just press Connect\./);
+      assert.equal(await buttonNamed(app, 'Connect').count(), 1);
+      assert.ok(await buttonNamed(app, 'Connect').evaluate((n) => n.classList.contains('btn-secondary')));
+      assert.match(text, /Claude Code is installed/, 'the finished install step is one ticked line');
+    });
+  }
+});
+
+test('subscription: signed in — the login step is ticked and Connect is primary', async (t) => {
+  const fake = createFakeAi({ detect: claudeApp(true, 'yes') });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openWindow(app);
+    await waitForPane(app, 'Claude');
+    await assertOnePrimary(app, 'Connect');
+    assert.match(await dialog(app).innerText(), /Logged in to Claude Code/);
+    assert.equal(await buttonNamed(app, 'Open Claude Code to log in').count(), 0, 'nothing left to do for the login');
+  });
+});
+
+test('subscription: a failed connect shows the error in its step, in view, with Try again; the retry connects', async (t) => {
+  const fake = createFakeAi({
+    detect: claudeApp(true, 'unknown'),
+    delayMs: 300,
+    connect: { ok: false, message: 'claude didn’t answer: “Not logged in · Please run /login”.', loggedOut: true },
+  });
+  await withApp(t, { ai: fake, viewport: { width: 1100, height: 560 } }, async (app) => {
+    await openWindow(app);
+    await waitForPane(app, 'Claude');
+    await buttonNamed(app, 'Open Claude Code to log in').click();
+    await buttonNamed(app, 'Connect').click();
+    await dialog(app).getByText('Checking Claude Code answers…').waitFor({ timeout: 5000 });
+
+    const notice = dialog(app).locator('.notice.is-error').first();
+    await notice.waitFor({ timeout: 5000 });
+    const inView = await notice.evaluate((n) => {
+      const r = n.getBoundingClientRect();
+      const p = n.closest('.cp-pane').getBoundingClientRect();
+      return r.top >= p.top - 1 && r.bottom <= p.bottom + 1;
+    });
+    assert.ok(inView, 'the notice is scrolled into view');
+    const noticeText = await notice.innerText();
+    assert.match(noticeText, /log in/i);
+    assert.equal(await notice.locator('button').count(), 0, 'it points at the login step, it does not repeat its button');
+    await assertOnePrimary(app, 'Try again');
+
+    fake.script({ connect: { ok: true, message: 'Connected.' } });
+    await buttonNamed(app, 'Try again').click();
+    await dialog(app).getByText(/^Connected/).first().waitFor({ timeout: 5000 });
+  });
+});
+
+test('a failure that is not about login says what happened and keeps one primary', async (t) => {
+  const fake = createFakeAi({
+    detect: claudeApp(true, 'yes'),
+    connect: { ok: false, message: 'claude didn’t answer: “connect ECONNRESET”.' },
+  });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openWindow(app);
+    await waitForPane(app, 'Claude');
+    await buttonNamed(app, 'Connect').click();
+    await dialog(app).getByText(/ECONNRESET/).waitFor({ timeout: 5000 });
+    await assertOnePrimary(app, 'Try again');
+  });
+});
+
+test('an AI that connects two ways has tabs, and connecting another AI says it replaces the current one', async (t) => {
+  const fake = createFakeAi({ detect: claudeApp(true, 'yes') });
+  fake.setConnection({ label: 'ChatGPT · gpt-5', ai: 'chatgpt', at: new Date().toISOString() });
+  await withApp(t, { ai: fake }, async (app) => {
+    await app.page.waitForFunction(() => /ChatGPT/.test(document.querySelector('.ai-header').textContent));
+    await openWindow(app);
+    await app.page.locator('.cp-row', { hasText: 'Claude' }).first().click();
+    await waitForPane(app, 'Claude');
+    assert.equal(await dialog(app).getByRole('tab', { name: 'Claude subscription' }).count(), 1);
+    assert.equal(await dialog(app).getByRole('tab', { name: 'API key' }).count(), 1);
+    assert.match(await dialog(app).innerText(), /Connecting this replaces ChatGPT/);
+  });
+});

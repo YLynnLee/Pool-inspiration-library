@@ -107,7 +107,11 @@ async function testConnection(config) {
           model: model,
         };
       }
-      return { ok: false, message: argv[0] + ' didn’t answer' + (text ? ': “' + text.slice(-300) + '”' : '') + '. If you haven’t logged in yet, do step 2 first.' };
+      var failure = { ok: false, message: argv[0] + ' didn’t answer' + (text ? ': “' + text.slice(-300) + '”' : '') + '.' };
+      // Read against the catalog's login prompts for this app. A match is
+      // reported so the window can send the collector to the login step.
+      if (catalog.looksLoggedOut(config.agent.preset, text)) failure.loggedOut = true;
+      return failure;
     } catch (e) {
       return { ok: false, message: e.message };
     }
@@ -130,12 +134,16 @@ async function testConnection(config) {
 
 // What the Connect panel can offer on this machine: which agent apps are
 // installed, which local model servers are running (and their models), and
-// which providers already have a key in the environment.
-async function detect(options) {
+// which providers already have a key in the environment. Each agent app also
+// says whether it's signedIn: 'yes' | 'no' | 'unknown', from what the helper
+// has seen of its tests (see config.loginState).
+// `storage` ({ file, store }) is where the config is read from.
+async function detect(options, storage) {
   if (!pathRefreshed || (options && options.fresh)) refreshPath();
   await pathRefreshed;
+  var saved = configModule.loadConfig(storage);
   var agents = configModule.AGENT_PRESETS.filter(function (p) { return p.id !== 'custom'; }).map(function (p) {
-    return { id: p.id, label: p.label, command: p.command, installed: onPath(p.command.split(' ')[0]) };
+    return { id: p.id, label: p.label, command: p.command, installed: onPath(p.command.split(' ')[0]), signedIn: configModule.loginState(saved, p.id) };
   });
   var local = await Promise.all(['ollama', 'lmstudio'].map(function (id) {
     var provider = configModule.findProvider(id);
@@ -153,8 +161,8 @@ async function detect(options) {
 // key being entered (or the saved one), or, in agent mode, the agent's own
 // list, with a suggested default, so the collector picks from a list instead
 // of typing a name.
-async function models(update) {
-  var draft = configModule.mergeConfig(configModule.loadConfig(), update);
+async function models(update, storage) {
+  var draft = configModule.mergeConfig(configModule.loadConfig(storage), update);
   if (draft.mode === 'agent') return agentModels(configModule.findPreset(draft.agent.preset));
   var ids = await providers.listModels(draft.api);
   return { models: ids, suggested: configModule.pickModel(draft.api.provider, ids) };
@@ -190,16 +198,25 @@ function parseModelList(text) {
 }
 
 // Connect = apply the choice, prove it works, and only then save it as the
-// connection the Drain button uses. A failed test saves nothing.
-async function connect(update) {
-  var draft = configModule.mergeConfig(configModule.loadConfig(), update);
+// connection the Drain button uses. A failed test saves no connection — but a
+// pass, or a login prompt in the failure, is remembered for that agent app.
+async function connect(update, storage) {
+  var draft = configModule.mergeConfig(configModule.loadConfig(storage), update);
   draft.connection = null;
   var result = await testConnection(draft);
+  if (draft.mode === 'agent') {
+    var event = result.ok ? 'answered' : result.loggedOut ? 'loggedOut' : null;
+    if (event) {
+      var remembered = configModule.recordLogin(draft, draft.agent.preset, event);
+      if (result.ok) draft = remembered;
+      else configModule.saveConfig(Object.assign(configModule.loadConfig(storage), { logins: remembered.logins }), storage);
+    }
+  }
   if (!result.ok) return result;
   var label = configModule.connectionLabel(draft);
   if (draft.mode === 'agent' && result.model) label += ' · ' + result.model;
   draft.connection = { label: label, ai: typeof update.ai === 'string' ? update.ai : null, at: new Date().toISOString() };
-  configModule.saveConfig(draft);
+  configModule.saveConfig(draft, storage);
   return { ok: true, message: 'Connected to ' + draft.connection.label + '.' };
 }
 
@@ -216,10 +233,12 @@ async function runTerminalAction(body) {
   }
 }
 
-function disconnect() {
-  var config = configModule.loadConfig();
+// Clears the connection only: installed apps and logins are untouched, so the
+// window can land on the step the collector is actually at.
+function disconnect(storage) {
+  var config = configModule.loadConfig(storage);
   config.connection = null;
-  configModule.saveConfig(config);
+  configModule.saveConfig(config, storage);
 }
 
 // options: { url?, log(line), signal? }
@@ -233,4 +252,24 @@ async function runDrain(config, options) {
   return apiDrain.runApiDrain(Object.assign({ api: config.api }, options));
 }
 
-module.exports = { loadConfig: configModule.loadConfig, testConnection: testConnection, runDrain: runDrain, detect: detect, models: models, connect: connect, disconnect: disconnect, runTerminalAction: runTerminalAction, refreshPath: refreshPath, extractAgentModel: extractAgentModel, parseModelList: parseModelList };
+// The helper's AI layer. `storage` ({ file, store }) says where the config and
+// its keys live; the tests point it at a temp directory. The default layer,
+// exported below, uses .drain.config.json and the OS secret store.
+function create(storage) {
+  return {
+    loadConfig: function () { return configModule.loadConfig(storage); },
+    testConnection: testConnection,
+    runDrain: runDrain,
+    detect: function (options) { return detect(options, storage); },
+    models: function (update) { return models(update, storage); },
+    connect: function (update) { return connect(update, storage); },
+    disconnect: function () { return disconnect(storage); },
+    runTerminalAction: runTerminalAction,
+    refreshPath: refreshPath,
+    extractAgentModel: extractAgentModel,
+    parseModelList: parseModelList,
+  };
+}
+
+module.exports = create();
+module.exports.create = create;
