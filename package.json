@@ -6,11 +6,11 @@
   "description": "A local-first library of web/app design references. Static site, no build step.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YLynnLee/Pool.git"
+    "url": "git+https://github.com/YLynnLee/Pool-inspiration-library.git"
   },
-  "homepage": "https://github.com/YLynnLee/Pool#readme",
+  "homepage": "https://github.com/YLynnLee/Pool-inspiration-library#readme",
   "bugs": {
-    "url": "https://github.com/YLynnLee/Pool/issues"
+    "url": "https://github.com/YLynnLee/Pool-inspiration-library/issues"
   },
   "engines": {
     "node": ">=20"

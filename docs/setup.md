@@ -22,7 +22,7 @@ editor, you only need `npm install` — see
 Either:
 
 - On GitHub, click **Code → Download ZIP**, then unzip it. **or**
-- In a terminal: `git clone https://github.com/YLynnLee/Pool.git`
+- In a terminal: `git clone https://github.com/YLynnLee/Pool-inspiration-library.git`
 
 Put the folder somewhere it will stay. If you move it later and you use the app, double-click
 `Start Pool` once more so your computer learns the new location.

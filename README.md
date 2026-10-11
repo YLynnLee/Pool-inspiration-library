@@ -1,6 +1,6 @@
 # Pool Inspiration Library
 
-[![Test](https://github.com/YLynnLee/Pool/actions/workflows/test.yml/badge.svg)](https://github.com/YLynnLee/Pool/actions/workflows/test.yml)
+[![Test](https://github.com/YLynnLee/Pool-inspiration-library/actions/workflows/test.yml/badge.svg)](https://github.com/YLynnLee/Pool-inspiration-library/actions/workflows/test.yml)
 
 **A personal library of web design references that runs entirely on your computer.**
 

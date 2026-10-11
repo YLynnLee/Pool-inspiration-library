@@ -13,7 +13,7 @@
 | The helper's background log | `.helper/helper.log` in the Pool folder. |
 | Screenshots fail and Chrome isn't installed | Run `npx playwright install chromium` once. |
 
-Still stuck? [Open an issue](https://github.com/YLynnLee/Pool/issues).
+Still stuck? [Open an issue](https://github.com/YLynnLee/Pool-inspiration-library/issues).
 
 ---
 
