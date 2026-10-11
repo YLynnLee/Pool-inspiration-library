@@ -3,13 +3,19 @@
 // (inbox-panel.js), which is where draining is started and watched.
 // Everything goes through the local helper (scripts/server.js); the page
 // itself never calls a model — see SECURITY.md.
-// Opened from file://, Connect AI explains how to start the helper instead.
+// Opened from file://, the Connect AI window explains how to start the helper.
 (function () {
   'use strict';
 
   var HELPER_URL = 'http://localhost:4747/';
   var served = window.location.protocol === 'http:' || window.location.protocol === 'https:';
   var cached = null;
+  // The last config the helper reported, kept while it isn't answering so the
+  // window and the header can say "still connected to …" about a stopped Pool.
+  var lastConfig = null;
+  // False until the first status request has come back, so a page that has
+  // only just loaded isn't mistaken for a helper that isn't there.
+  var statusSettled = !served;
   var el = window.UI.el;
   var icon = window.UI.icon;
   var listeners = [];
@@ -17,6 +23,24 @@
   function notify() {
     renderHeaders();
     listeners.forEach(function (fn) { fn(); });
+  }
+
+  function adopt(status) {
+    cached = status;
+    if (status) lastConfig = status.config;
+  }
+
+  // The helper stopped answering (its Terminal window was closed, the process
+  // died, …) as opposed to answering with an error. Everything it reported is
+  // stale; the window and the header move to "Pool stopped".
+  function onHelperLost() {
+    var wasUp = !!cached;
+    cached = null;
+    found = null;
+    if (wasUp) {
+      notify();
+      syncWindow();
+    }
   }
 
   function api(method, pathname, body) {
@@ -30,12 +54,11 @@
         return json;
       });
     }, function () {
-      // fetch() itself rejected — the helper isn't answering at all (its
-      // terminal window was closed, the process died, …), as opposed to it
-      // answering with an error. Tagged so callers can offer to restart it
-      // instead of showing the browser's raw "Failed to fetch".
+      // fetch() itself rejected: tagged so callers can stay quiet instead of
+      // showing the browser's raw "Failed to fetch".
       var err = new Error('Lost contact with the library helper — is it still running?');
       err.helperDown = true;
+      onHelperLost();
       throw err;
     });
   }
@@ -43,47 +66,47 @@
   function refreshStatus() {
     if (!served) return Promise.resolve(null);
     return api('GET', '/api/status').then(function (s) {
-      cached = s;
+      adopt(s);
+      statusSettled = true;
       if (s.job && s.job.running) followDrain();
       notify();
+      syncWindow();
       return s;
     }, function () {
       cached = null;
+      statusSettled = true;
       notify();
+      syncWindow();
       return null;
     });
   }
 
-  // ---- header: the AI pill -------------------------------------------------------
+  // ---- header: the Connect AI button ---------------------------------------------
   //
-  // Not connected: a quiet "Connect AI" with a hollow dot. Connected: the AI's
-  // name with a lit dot, opening a small menu to switch or disconnect — the
-  // full Connect dialog only opens when there's actually a choice to make.
+  // Three faces, each readable without the colour: off (dashed, a plus,
+  // "Connect AI"), on (a dot, "AI · model") and Pool stopped (amber, an alert
+  // icon, "Pool stopped"). Every face opens the Connect AI window.
+
+  function aiLabel(config) {
+    var described = window.LinkStatus.describeAi(config);
+    if (!described) return '';
+    return described.name + (described.model ? ' · ' + described.model : '');
+  }
 
   function fillHeader(slot) {
-    window.UI.closePopoverWithin(slot);
     slot.textContent = '';
+    var stopped = !cached && served && statusSettled && lastConfig && lastConfig.connection;
     var connection = cached && cached.config.connection;
-    if (!connection) {
-      slot.appendChild(el('button', {
-        class: 'btn btn-secondary',
-        type: 'button',
-        onclick: function () { openConnect(); },
-      }, [el('span', { class: 'ai-dot is-off', 'aria-hidden': 'true' }), 'Connect AI']));
-      return;
-    }
+    var face = stopped ? 'is-warn' : connection ? 'is-on' : 'is-off';
+    var text = stopped ? 'Pool stopped' : connection ? aiLabel(cached.config) || connection.label : 'Connect AI';
+    var lead = face === 'is-off' ? icon('plus', 'cp-pill-icon') : face === 'is-warn' ? icon('alert', 'cp-pill-icon') : el('span', { class: 'ai-dot', 'aria-hidden': 'true' });
     slot.appendChild(el('button', {
-      class: 'btn btn-secondary',
+      class: 'btn btn-secondary cp-pill ' + face,
       type: 'button',
       'aria-haspopup': 'dialog',
-      'aria-expanded': 'false',
-      title: 'Connected to ' + connection.label,
-      onclick: function (evt) { openAiMenu(evt.currentTarget); },
-    }, [
-      el('span', { class: 'ai-dot', 'aria-hidden': 'true' }),
-      el('span', { class: 'ai-label', text: (window.LinkStatus.describeAi(cached.config) || connection).name || connection.label }),
-      icon('chevron', 'ai-chevron'),
-    ]));
+      title: stopped ? 'Pool needs to be running to analyse' : connection ? 'Connected to ' + connection.label : null,
+      onclick: function () { openConnect(); },
+    }, [lead, el('span', { class: 'ai-label', text: text })]));
   }
 
   function renderHeaders() {
@@ -99,9 +122,9 @@
 
   // ---- changing the model -------------------------------------------------------
   //
-  // Shared by the header menu and the drawer's AI · model line. Saving re-runs
-  // the connection test, so a model that can't answer never replaces one that
-  // can: on failure nothing is saved and the previous model stays.
+  // Shared by the Connect AI window and the drawer's AI · model line. Saving
+  // re-runs the connection test, so a model that can't answer never replaces
+  // one that can: on failure nothing is saved and the previous model stays.
 
   var modelCheck = { checking: '' };
 
@@ -122,7 +145,7 @@
     modelCheck.checking = model;
     notify();
     return api('POST', '/api/connect', update).then(function (r) {
-      cached = r.status;
+      adopt(r.status);
       if (!r.ok) throw new Error(r.message);
       return r;
     }).then(function (r) {
@@ -142,207 +165,25 @@
     return 'Agent app on this computer';
   }
 
-  function openAiMenu(trigger) {
-    var connection = cached.config.connection;
-    var body = el('div', { class: 'ai-menu' });
-
-    function showMain() {
-      body.textContent = '';
-      var since = window.UI.timeAgo(connection.at);
-      body.appendChild(el('p', { class: 'popover-eyebrow', text: 'AI for analysing' }));
-      body.appendChild(el('div', { class: 'ai-menu-current' }, [
-        el('span', { class: 'ai-dot', 'aria-hidden': 'true' }),
-        el('div', {}, [
-          el('p', { class: 'ai-menu-name', text: connection.label }),
-          el('p', { class: 'ai-menu-meta', text: describeConnection() + (since ? ' · connected ' + since : '') }),
-        ]),
-      ]));
-      var running = drain.running;
-      var config = cached.config;
-      var canChooseModel = config.mode === 'api' || (config.agent && config.agent.preset !== 'custom');
-      body.appendChild(el('div', { class: 'ai-menu-actions' }, [
-        canChooseModel ? el('button', {
-          class: 'btn btn-secondary btn-sm',
-          type: 'button',
-          text: 'Model…',
-          disabled: running,
-          title: running ? 'Stop analysing first' : null,
-          onclick: showModel,
-        }) : null,
-        el('button', {
-          class: 'btn btn-secondary btn-sm',
-          type: 'button',
-          text: 'Switch AI…',
-          onclick: function () { window.UI.closePopover(); openConnect(); },
-        }),
-        el('button', {
-          class: 'btn btn-secondary btn-sm btn-danger-quiet',
-          type: 'button',
-          text: 'Disconnect',
-          disabled: running,
-          title: running ? 'Stop analysing first' : null,
-          onclick: showConfirm,
-        }),
-      ]));
-      if (running) body.appendChild(window.UI.notice('info', { title: 'Analysing is running with this AI.' }));
-    }
-
-    // Picks the model this AI drains with. An agent app gets "its own
-    // default" plus its models (or a typed name); an API gets its model
-    // list. Saving re-runs the connection test, so a model that can't
-    // answer never replaces one that can.
-    function showModel() {
-      body.textContent = '';
-      var config = cached.config;
-      var agentMode = config.mode === 'agent';
-      var current = agentMode ? config.agent.model || '' : config.api.model;
-      var OTHER = '\u0000other';
-      var status = el('div', { class: 'notice-slot' });
-      window.UI.setNotice(status, 'info', { title: 'Loading models…' });
-      var select = el('select', { class: 'add-modal-input', 'aria-label': 'Model', hidden: 'hidden' });
-      var typed = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Model name', placeholder: 'Model name', hidden: 'hidden' });
-      var save = el('button', { class: 'btn btn-primary btn-sm', type: 'button', text: 'Use this model', disabled: true });
-      body.appendChild(el('p', { class: 'popover-eyebrow', text: 'Model' }));
-      body.appendChild(el('div', { class: 'ai-model-pick' }, [select, typed]));
-      body.appendChild(status);
-      body.appendChild(el('div', { class: 'ai-menu-actions' }, [
-        el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: 'Back', onclick: showMain }),
-        save,
-      ]));
-
-      function chosen() {
-        return select.hidden || select.value === OTHER ? typed.value.trim() : select.value;
-      }
-
-      select.addEventListener('change', function () {
-        typed.hidden = select.value !== OTHER;
-        if (!typed.hidden) typed.focus();
-      });
-
-      api('POST', '/api/models', { mode: config.mode }).then(function (r) {
-        var options = r.models.map(function (m) {
-          return typeof m === 'string' ? { id: m, label: m } : m;
-        });
-        var free = agentMode ? r.free : true;
-        if (agentMode) options.unshift({ id: '', label: 'Its own default' });
-        var known = options.some(function (o) { return o.id === current; });
-        if (!known && current) options.push({ id: current, label: current });
-        if (free) options.push({ id: OTHER, label: 'Other…' });
-        options.forEach(function (o) {
-          select.appendChild(el('option', { value: o.id, text: o.label }));
-        });
-        select.value = current;
-        select.hidden = false;
-        window.UI.setNotice(status, agentMode && !r.models.length && free ? 'info' : null, { title: 'No models listed', text: 'Pick “Other…” to type a model name this app accepts.' });
-        save.disabled = false;
-        select.focus();
-      }, function (err) {
-        // No list to pick from (the key or server can't list models): a
-        // typed name still works.
-        typed.hidden = false;
-        typed.value = current;
-        window.UI.setNotice(status, 'warning', { title: 'Couldn’t list models', text: err.message + ' Type a model name instead.' });
-        save.disabled = false;
-      });
-
-      save.addEventListener('click', function () {
-        var model = chosen();
-        if (!agentMode && !model) {
-          window.UI.setNotice(status, 'error', { title: 'No model chosen', text: 'Choose a model, then try again.' });
-          return;
-        }
-        save.disabled = true;
-        window.UI.setNotice(status, 'info', { title: agentMode ? 'Checking it answers…' : 'Checking it can see images…', text: agentMode ? 'This can take up to a minute.' : null });
-        setModel(model).then(function (r) {
-          window.UI.closePopover();
-          window.UI.toast(r.message);
-        }).catch(function (err) {
-          window.UI.setNotice(status, 'error', { title: 'Couldn’t switch model', text: err.message + (err.helperDown ? '' : ' Still using the previous model.') });
-          save.disabled = false;
-        });
-      });
-    }
-
-    function showConfirm() {
-      body.textContent = '';
-      var status = el('div', { class: 'notice-slot' });
-      var confirm = el('button', { class: 'btn btn-danger btn-sm', type: 'button', text: 'Disconnect' });
-      confirm.addEventListener('click', function () {
-        confirm.disabled = true;
-        confirm.textContent = 'Disconnecting…';
-        api('POST', '/api/disconnect', {}).then(function (next) {
-          cached = next;
-          window.UI.closePopover();
-          notify();
-          window.UI.toast('Disconnected from ' + connection.label + '. Your library is unchanged.', {
-            action: { label: 'Connect another', run: function () { openConnect(); } },
-          });
-        }, function (err) {
-          confirm.disabled = false;
-          confirm.textContent = 'Disconnect';
-          window.UI.setNotice(status, 'error', { title: 'Couldn’t disconnect', text: err.message });
-        });
-      });
-      body.appendChild(el('p', { class: 'ai-menu-name', text: 'Disconnect ' + connection.label + '?' }));
-      body.appendChild(el('p', { class: 'ai-menu-meta', text: 'Analysing stops until you connect an AI again. Your library is unchanged.' }));
-      body.appendChild(el('div', { class: 'ai-menu-actions' }, [
-        el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: 'Cancel', onclick: showMain }),
-        confirm,
-      ]));
-      body.appendChild(status);
-      confirm.focus();
-    }
-
-    showMain();
-    window.UI.popover(trigger, body);
-  }
-
-  // ---- modal shell -------------------------------------------------------------
-
-  function onKey(evt) {
-    if (evt.key === 'Escape') closeModal();
-  }
-
-  function closeModal() {
-    var overlay = document.querySelector('.ai-modal-overlay');
-    if (overlay) overlay.remove();
-    document.removeEventListener('keydown', onKey);
-  }
-
-  function mount(children) {
-    closeModal();
-    var modal = el('div', { class: 'add-modal ai-modal', role: 'dialog', 'aria-modal': 'true' }, children);
-    var overlay = el('div', { class: 'add-modal-overlay ai-modal-overlay' }, [modal]);
-    overlay.addEventListener('click', function (evt) {
-      if (evt.target === overlay) closeModal();
-    });
-    document.addEventListener('keydown', onKey);
-    document.body.appendChild(overlay);
-    return modal;
-  }
-
-  function closeButton(text) {
-    return el('button', { class: 'btn btn-secondary', type: 'button', text: text || 'Close', onclick: closeModal });
-  }
-
-  // ---- Connect: opened from file:// --------------------------------------------
+  // ---- the Connect AI window ---------------------------------------------------------
   //
-  // A page can't start programs, but it can follow an pool://
-  // link, which the launcher registers with the computer on its first run
-  // (scripts/register-url-handler.sh). Following it starts the helper
-  // quietly; this waits for it to answer, then switches to it with Connect
-  // already open.
+  // One window for the whole journey: the AIs on the left (grouped by what Pool
+  // found, with one search box), the chosen AI on the right. Before Pool runs
+  // there's nothing to choose yet, so the window is smaller, with one pane and
+  // no list. It is in one of three phases, worked out each time it renders:
+  //   helper  Pool isn't answering: how to start it
+  //   scan    Pool answers, detection hasn't come back: a quiet list
+  //   ready   the full list, search and pane
 
   var START_LINK = 'pool://start';
-  // pool:// only works once "Start Pool" has been double-clicked by hand at
-  // least once (that's what registers the link — see
-  // scripts/register-url-handler.sh). Until then this link resolves to
-  // nothing and the helper will never answer, so there's little point
-  // waiting long or burying the manual step behind a delay: it's shown
-  // up front, every time, as the actual instruction — the automatic
-  // pool:// attempt is the shortcut that skips it once it's set up, not
-  // the primary thing being explained.
-  var WAIT_MS = 60000;
+  var EMPTY_FOUND = { agents: [], local: [], envKeys: [] };
+  var OTHER = { id: 'other', name: 'Something else', blurb: 'Any agent command, or an OpenAI-compatible server.' };
+
+  var found = null; // what detection saw: { agents, local, envKeys }
+  var scanning = false;
+  var win = null; // { overlay, modal, list, pane, filter, phase, timer }
+  var ui = { selected: null, query: '', method: {}, otherKind: 'agent' };
+  var paneSeq = 0; // changes whenever the pane is rebuilt, so late callbacks can tell
 
   function helperUp() {
     // An opaque no-cors request still tells us whether anything answers.
@@ -353,61 +194,12 @@
     window.location.href = HELPER_URL + '?connect=1';
   }
 
-  function openStartHelper() {
-    helperUp().then(function (up) {
-      if (up) return goToHelper();
-
-      var status = el('div', { class: 'notice-slot' });
-      var retry = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Try again', hidden: 'hidden' });
-      var stopped = false;
-      mount([
-        el('h2', { class: 'add-modal-title', text: 'One-time setup: start Pool' }),
-        el('p', { class: 'ai-lede', text: 'Before Connect AI can reach your computer, it needs to be started once, by hand. After this, Connect AI opens on its own — no more steps.' }),
-        el('ol', { class: 'ai-steps-list' }, [
-          step(1, 'Open the Pool folder', false, [el('p', { class: 'ai-hint', text: 'The folder this library lives in — where this page’s file is.' })]),
-          step(2, 'Double-click “Start Pool”', false, [el('p', { class: 'ai-hint', text: '(“Start Pool.bat” on Windows.) A window opens and sets things up.' })]),
-          step(3, 'Leave that window open, then come back here', false, [status]),
-        ]),
-        el('div', { class: 'add-modal-actions' }, [el('button', { class: 'btn btn-secondary', type: 'button', text: 'Cancel', onclick: function () { stopped = true; closeModal(); } }), retry]),
-      ]);
-
-      function start() {
-        stopped = false;
-        retry.hidden = true;
-        window.UI.setNotice(status, 'info', { title: 'Trying to connect automatically…' });
-        window.location.href = START_LINK;
-        var began = Date.now();
-        (function poll() {
-          if (stopped || !document.body.contains(status)) return;
-          helperUp().then(function (ok) {
-            if (ok) {
-              window.UI.setNotice(status, 'success', { title: 'Ready — opening…' });
-              return goToHelper();
-            }
-            var waited = Date.now() - began;
-            if (waited > WAIT_MS) {
-              window.UI.setNotice(status, 'error', { title: 'Pool still isn’t running', text: 'Do the steps above, then try again.' });
-              retry.hidden = false;
-              return;
-            }
-            window.setTimeout(poll, 1000);
-          });
-        })();
-      }
-      retry.addEventListener('click', start);
-      start();
-    });
+  function phase() {
+    if (!served) return 'helper';
+    if (!statusSettled) return 'scan';
+    if (!cached) return 'helper';
+    return found ? 'ready' : 'scan';
   }
-
-  // ---- Connect: pick an AI, then follow its own guide ----------------------------
-  //
-  // The grid lists AIs by the names people know (Claude, ChatGPT, Gemini…).
-  // Each opens a guide shaped by how that AI connects: an agent app gets
-  // install → log in → connect steps, an API key gets a "get a key" link and
-  // a key field, a local model server gets download → model → connect. The
-  // guide ticks off what the helper can already see is done.
-
-  var found = null;
 
   function detectNow(fresh) {
     return api('GET', '/api/detect' + (fresh ? '?fresh=1' : '')).then(function (d) {
@@ -415,6 +207,20 @@
       return d;
     });
   }
+
+  function ensureScan() {
+    if (found || scanning || !cached) return;
+    scanning = true;
+    detectNow().then(null, function () {
+      // The guides still work without detection.
+      if (cached) found = EMPTY_FOUND;
+    }).then(function () {
+      scanning = false;
+      syncWindow();
+    });
+  }
+
+  // ---- what Pool found, as a status per AI ----
 
   function agentInstalled(preset) {
     var a = found && found.agents.find(function (x) { return x.id === preset; });
@@ -429,18 +235,407 @@
     return !!(found && found.envKeys.indexOf(provider) !== -1);
   }
 
-  function tagFor(ai) {
+  function isConnectedTo(aiId, mode) {
     var connection = cached.config.connection;
-    if (connection && connection.ai === ai.id) return 'Connected';
-    if (!found) return '';
-    for (var i = 0; i < ai.methods.length; i++) {
-      var m = ai.methods[i];
-      if (m.id === 'agent' && agentInstalled(m.preset)) return 'Installed';
-      if (m.id === 'local' && localServer(m.provider) && localServer(m.provider).running) return 'Running';
-      if (m.id === 'key' && hasEnvKey(m.provider)) return 'Key found';
-    }
-    return '';
+    return !!(connection && connection.ai === aiId && (!mode || cached.config.mode === mode));
   }
+
+  // { tone, text } — only ever news about what's here. null when nothing is.
+  function statusOf(ai) {
+    if (isConnectedTo(ai.id)) return { tone: 'on', text: 'Connected' };
+    var kinds = { agent: null, local: null, key: null };
+    ai.methods.forEach(function (m) {
+      if (m.id === 'agent' && agentInstalled(m.preset)) kinds.agent = { tone: 'ready', text: 'Installed' };
+      if (m.id === 'local') {
+        var server = localServer(m.provider);
+        if (server && server.running) kinds.local = { tone: 'ready', text: server.models.length ? 'Running' : 'Running · needs a model' };
+      }
+      if (m.id === 'key' && hasEnvKey(m.provider)) kinds.key = { tone: 'ready', text: 'Key found' };
+    });
+    return kinds.agent || kinds.local || kinds.key;
+  }
+
+  function rank(ai) {
+    var st = statusOf(ai);
+    return !st ? 3 : st.text === 'Installed' ? 0 : st.text === 'Key found' ? 2 : 1;
+  }
+
+  // ---- search: by the AI's name, the app it runs through, or its key's company ----
+
+  function query() {
+    return ui.query.trim().toLowerCase();
+  }
+
+  function providerLabel(id) {
+    var p = cached && cached.presets.providers.find(function (x) { return x.id === id; });
+    return p ? p.label : id;
+  }
+
+  function matchedVia(ai) {
+    var q = query();
+    if (!q || ai.name.toLowerCase().indexOf(q) >= 0) return '';
+    var names = [];
+    ai.methods.forEach(function (m) {
+      if (m.app) names.push(m.app);
+      if (m.provider) names.push(providerLabel(m.provider));
+    });
+    var hit = names.find(function (n) { return n.toLowerCase().indexOf(q) >= 0; });
+    return hit ? 'via ' + hit : '';
+  }
+
+  function passesSearch(ai) {
+    var q = query();
+    return !q || ai.name.toLowerCase().indexOf(q) >= 0 || !!matchedVia(ai) || String(ai.blurb || '').toLowerCase().indexOf(q) >= 0;
+  }
+
+  // In use · On this computer · More AIs, in the order they're listed.
+  function groups() {
+    var inUse = [];
+    var here = [];
+    var more = [];
+    cached.catalog.filter(passesSearch).forEach(function (ai) {
+      if (isConnectedTo(ai.id)) inUse.push(ai);
+      else if (statusOf(ai)) here.push(ai);
+      else more.push(ai);
+    });
+    here.sort(function (a, b) { return rank(a) - rank(b); });
+    return [
+      { label: 'In use', items: inUse },
+      { label: 'On this computer', items: here },
+      { label: inUse.length || here.length ? 'More AIs' : 'AIs', items: more },
+    ].filter(function (g) { return g.items.length; });
+  }
+
+  function shownIds() {
+    var ids = [];
+    groups().forEach(function (g) { g.items.forEach(function (ai) { ids.push(ai.id); }); });
+    return ids;
+  }
+
+  // The AI the window opens on: the connected one, else the best found.
+  function defaultSelection() {
+    var connection = cached.config.connection;
+    if (connection && cached.catalog.some(function (a) { return a.id === connection.ai; })) return connection.ai;
+    var ids = shownIds();
+    return ids.length ? ids[0] : 'other';
+  }
+
+  function findAi(id) {
+    return cached.catalog.find(function (a) { return a.id === id; });
+  }
+
+  // ---- window shell ----
+
+  function closeModal() {
+    openingSeq++;
+    if (!win) return;
+    window.clearInterval(win.timer);
+    win.overlay.remove();
+    win = null;
+    document.removeEventListener('keydown', onKey);
+  }
+
+  var openingSeq = 0;
+
+  function openConnect(aiId) {
+    closeModal();
+    ui.selected = aiId || null;
+    ui.query = '';
+    // Whatever the page last heard, ask again first: the window opens on the
+    // truth (Pool may have stopped since), not on a stale frame.
+    var seq = ++openingSeq;
+    if (served) refreshStatus().then(function () { if (seq === openingSeq) mountWindow(); });
+    else mountWindow();
+  }
+
+  function mountWindow() {
+    var modal = el('div', { class: 'add-modal ai-modal cp-modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Connect AI' });
+    var overlay = el('div', { class: 'add-modal-overlay cp-overlay' }, [modal]);
+    overlay.addEventListener('click', function (evt) {
+      if (evt.target === overlay) closeModal();
+    });
+    win = { overlay: overlay, modal: modal, list: null, pane: null, filter: null, phase: null, focused: false, timer: 0 };
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(overlay);
+    // While Pool isn't answering, keep asking: the window moves on by itself.
+    win.timer = window.setInterval(function () {
+      if (!win || win.phase !== 'helper') return;
+      if (served) refreshStatus();
+      else helperUp().then(function (up) { if (up && win) goToHelper(); });
+    }, 1500);
+    renderWindow();
+  }
+
+  // Re-renders the whole window only when its phase changed, so a refresh in
+  // the background never wipes what's being typed.
+  function syncWindow() {
+    if (win && phase() !== win.phase) renderWindow();
+  }
+
+  function onKey(evt) {
+    if (!win) return;
+    if (evt.key === 'Escape') {
+      evt.preventDefault();
+      if (ui.query) {
+        ui.query = '';
+        if (win.filter) win.filter.querySelector('input').value = '';
+        selectionFollowsSearch();
+        renderList();
+        renderPane();
+        return;
+      }
+      return closeModal();
+    }
+    if ((evt.key === 'ArrowDown' || evt.key === 'ArrowUp') && win.phase === 'ready') {
+      var t = evt.target;
+      var inList = t === document.body || (t.closest && (t.closest('.cp-list') || t.classList.contains('cp-search')));
+      if (!inList) return;
+      evt.preventDefault();
+      var ids = shownIds().concat(['other']);
+      var i = ids.indexOf(ui.selected) + (evt.key === 'ArrowDown' ? 1 : -1);
+      if (i < 0 || i >= ids.length) return;
+      var fromSearch = t.classList && t.classList.contains('cp-search');
+      choose(ids[i]);
+      if (!fromSearch) {
+        var row = win.list.querySelector('.cp-row.is-selected');
+        if (row) row.focus();
+      }
+    }
+  }
+
+  function choose(id) {
+    ui.selected = id;
+    renderList();
+    renderPane();
+  }
+
+  // A search that hides the open AI moves the pane to the first one left.
+  function selectionFollowsSearch() {
+    var ids = shownIds();
+    if (ui.selected === null) ui.selected = defaultSelection();
+    else if (ui.selected !== 'other' && ids.indexOf(ui.selected) < 0) ui.selected = ids.length ? ids[0] : 'other';
+  }
+
+  function renderWindow() {
+    if (!win) return;
+    var p = phase();
+    win.phase = p;
+    win.modal.textContent = '';
+    win.modal.classList.toggle('is-single', p === 'helper');
+    win.modal.appendChild(head(p));
+    win.pane = el('div', { class: 'cp-pane' });
+    win.filter = null;
+    if (p === 'helper') {
+      win.list = null;
+      win.modal.appendChild(win.pane);
+    } else {
+      win.list = el('div', { class: 'cp-list' + (p === 'scan' ? ' is-waiting' : ''), role: 'listbox', 'aria-label': 'AIs', 'aria-disabled': String(p !== 'ready') });
+      win.modal.appendChild(el('div', { class: 'cp-split' }, [win.list, win.pane]));
+    }
+    if (p === 'ready') {
+      win.filter = searchBar();
+      selectionFollowsSearch();
+    }
+    renderList();
+    renderPane();
+    if (p === 'scan') ensureScan();
+    if (p === 'ready' && win.filter && !win.focused && window.matchMedia('(min-width: 721px)').matches) {
+      win.focused = true;
+      win.filter.querySelector('input').focus();
+    }
+  }
+
+  // The title line says where you stand, not what the window is called.
+  function head(p) {
+    var connection = cached && cached.config.connection;
+    var stopped = p === 'helper' && served && lastConfig && lastConfig.connection;
+    var title = stopped ? 'Pool stopped running' : connection ? 'AI for analysing' : 'Connect an AI';
+    var lede = stopped ? 'Still connected to ' + aiLabel(lastConfig) + '.'
+      : p === 'helper' ? 'One thing first: Pool has to be running on this computer.'
+      : p === 'scan' ? 'Looking at what’s already on this computer…'
+      : connection ? 'Analysing with ' + (aiLabel(cached.config) || connection.label) + '.'
+      : 'Pool uses an AI to write up each reference you capture. Pick one you already use.';
+    return el('div', { class: 'cp-pane-head' }, [
+      el('div', {}, [el('h2', { class: 'add-modal-title', text: title }), el('p', { class: 'ai-lede', text: lede })]),
+      el('button', { class: 'cp-x', type: 'button', 'aria-label': 'Close', onclick: closeModal }, [icon('close')]),
+    ]);
+  }
+
+  // ---- the list ----
+
+  function monogram(ai, size) {
+    return el('span', { class: 'cp-mark' + (size ? ' cp-mark-' + size : ''), 'aria-hidden': 'true', text: ai.name.charAt(0) });
+  }
+
+  function statusLine(st, cls) {
+    return el('span', { class: cls + ' is-' + st.tone }, [el('span', { class: 'cp-status-dot', 'aria-hidden': 'true' }), st.text]);
+  }
+
+  function renderList() {
+    if (!win || !win.list) return;
+    var root = win.list;
+    root.textContent = '';
+    if (win.phase !== 'ready') {
+      // While Pool looks, the list is there but quiet: catalogue order,
+      // nothing to pick yet.
+      var all = cached ? cached.catalog.concat([OTHER]) : [];
+      all.forEach(function (ai, i) {
+        root.appendChild(el('div', { class: 'cp-row', style: '--i:' + i }, [
+          monogram(ai),
+          el('span', { class: 'cp-row-name', text: ai.name }),
+          ai !== OTHER ? el('span', { class: 'cp-row-status cp-row-looking', text: 'Looking…' }) : null,
+        ]));
+      });
+      return;
+    }
+    root.appendChild(win.filter);
+    var gs = groups();
+    if (!gs.length) {
+      root.appendChild(el('div', { class: 'cp-empty' }, [
+        el('p', { text: 'Nothing called “' + ui.query.trim() + '”.' }),
+        el('p', { class: 'cp-empty-hint', text: 'If it’s an agent that runs in a terminal, or a server that speaks the OpenAI format, add it under Something else.' }),
+      ]));
+    }
+    gs.forEach(function (g) {
+      root.appendChild(el('p', { class: 'cp-group', text: g.label }));
+      g.items.forEach(function (ai) {
+        var st = statusOf(ai);
+        var via = matchedVia(ai);
+        root.appendChild(row(ai, st ? statusLine(st, 'cp-row-status') : via ? el('span', { class: 'cp-row-status is-none', text: via }) : null));
+      });
+    });
+    // "Something else" is pinned to the foot of the list, always in reach.
+    root.appendChild(el('div', { class: 'cp-list-foot' }, [row(OTHER, null)]));
+  }
+
+  function row(ai, statusNode) {
+    var on = ui.selected === ai.id;
+    return el('button', {
+      class: 'cp-row' + (on ? ' is-selected' : ''),
+      type: 'button',
+      role: 'option',
+      'aria-selected': String(on),
+      tabindex: on ? '0' : '-1',
+      onclick: function () { choose(ai.id); },
+    }, [monogram(ai), el('span', { class: 'cp-row-name', text: ai.name }), statusNode]);
+  }
+
+  // Enter opens the top match; Esc (handled for the window) clears the box
+  // before it closes anything.
+  function searchBar() {
+    var input = el('input', {
+      class: 'add-modal-input cp-search',
+      type: 'search',
+      role: 'searchbox',
+      placeholder: window.matchMedia('(max-width: 720px)').matches ? 'Search' : 'Search AIs and apps',
+      'aria-label': 'Search AIs and apps',
+      value: ui.query,
+      autocomplete: 'off',
+      spellcheck: 'false',
+    });
+    input.addEventListener('input', function () {
+      ui.query = input.value;
+      selectionFollowsSearch();
+      renderList();
+      renderPane();
+    });
+    input.addEventListener('keydown', function (evt) {
+      if (evt.key === 'Enter') {
+        evt.preventDefault();
+        var ids = shownIds();
+        if (ids.length) choose(ids[0]);
+      }
+    });
+    return el('div', { class: 'cp-filter' }, [el('span', { class: 'cp-search-wrap' }, [icon('search', 'cp-search-icon'), input])]);
+  }
+
+  // ---- the pane ----
+
+  function renderPane() {
+    if (!win || !win.pane) return;
+    paneSeq++;
+    var pane = win.pane;
+    pane.textContent = '';
+    if (win.phase === 'helper') return helperPane(pane);
+    if (win.phase === 'scan') return scanPane(pane);
+    if (ui.selected === 'other') {
+      pane.appendChild(el('div', { class: 'cp-ai-head' }, [
+        monogram(OTHER, 'lg'),
+        el('div', { class: 'cp-ai-head-text' }, [el('h3', { class: 'cp-pane-title', text: OTHER.name }), el('p', { class: 'ai-hint', text: OTHER.blurb })]),
+      ]));
+      return otherInto(pane);
+    }
+    var ai = findAi(ui.selected);
+    var st = statusOf(ai);
+    pane.appendChild(el('div', { class: 'cp-ai-head' }, [
+      monogram(ai, 'lg'),
+      el('div', { class: 'cp-ai-head-text' }, [el('h3', { class: 'cp-pane-title', text: ai.name }), el('p', { class: 'ai-hint', text: ai.blurb })]),
+      st ? statusLine(st, 'cp-badge') : null,
+    ]));
+    guideInto(pane, ai);
+  }
+
+  function hint(text) {
+    return el('p', { class: 'ai-hint', text: text });
+  }
+
+  // Pool isn't running. First start: the one by-hand step (the pool:// link
+  // can't work until Start Pool has been double-clicked once). Stopped: one
+  // button, and the connection is named so it doesn't feel like starting over.
+  function helperPane(pane) {
+    var status = el('div', { class: 'notice-slot' });
+    var stopped = served && lastConfig && lastConfig.connection;
+    if (stopped) {
+      var start = el('button', { class: 'btn btn-primary', type: 'button', text: 'Start Pool' });
+      start.addEventListener('click', function () {
+        start.disabled = true;
+        window.UI.setNotice(status, 'info', { title: 'Starting Pool…', text: 'A Terminal window opens. Leave it open while you work.' });
+        window.location.href = START_LINK;
+        window.setTimeout(function () { start.disabled = false; }, 8000);
+      });
+      pane.appendChild(el('h3', { class: 'cp-pane-title', text: 'Start Pool again' }));
+      pane.appendChild(hint('Its Terminal window was closed. Nothing’s lost — ' + aiLabel(lastConfig) + ' is still your AI; Pool just needs to run to use it.'));
+      pane.appendChild(el('div', { class: 'cp-helper-actions' }, [start]));
+      pane.appendChild(status);
+      pane.appendChild(hint('Browsing your library works without it. Only adding and analysing need Pool running.'));
+      return;
+    }
+    function helperStep(n, title, text, extra) {
+      return el('li', { class: 'ai-step' }, [
+        el('span', { class: 'ai-step-mark', 'aria-hidden': 'true', text: String(n) }),
+        el('div', { class: 'ai-step-body' }, [el('p', { class: 'ai-step-title', text: title }), hint(text), extra || null]),
+      ]);
+    }
+    window.UI.setNotice(status, 'info', { title: 'Waiting for Pool to start…' });
+    pane.appendChild(el('h3', { class: 'cp-pane-title', text: 'Start Pool once' }));
+    pane.appendChild(hint('The very first time, by hand. After that, Connect AI can start it for you.'));
+    pane.appendChild(el('ol', { class: 'ai-steps-list cp-steps' }, [
+      helperStep(1, 'Open the Pool folder', 'The folder this library lives in — where this page’s file is.'),
+      helperStep(2, 'Double-click “Start Pool”', '(“Start Pool.bat” on Windows.) A Terminal window opens and sets things up — about a minute the first time.'),
+      helperStep(3, 'Leave that window open', 'This window notices on its own and carries on.', status),
+    ]));
+    pane.appendChild(el('p', { class: 'cp-start-link' }, [
+      'Already did this once? ',
+      el('a', { href: START_LINK, text: 'Start Pool for me' }),
+      '.',
+    ]));
+  }
+
+  function scanPane(pane) {
+    var kinds = ['Agent apps', 'Models running on this computer', 'API keys already set up'];
+    pane.appendChild(el('h3', { class: 'cp-pane-title', text: 'Looking around' }));
+    pane.appendChild(hint('Pool checks what you already have, so you don’t have to know.'));
+    pane.appendChild(el('ul', { class: 'cp-scan' }, kinds.map(function (t) {
+      return el('li', { class: 'cp-scan-row' }, [el('span', { class: 'cp-scan-dot', 'aria-hidden': 'true' }), t]);
+    })));
+  }
+
+  // ---- one AI's pane: its guide, or — once connected — the connection ----------------
+  //
+  // Each AI opens a guide shaped by how it connects: an agent app gets
+  // install → log in → connect steps, an API key gets a "get a key" link and a
+  // key field, a local model server gets download → model → connect. The guide
+  // ticks off what the helper can already see is done.
 
   // A link that leaves Pool, marked with the external-link icon.
   function extLink(href, label) {
@@ -472,358 +667,425 @@
   // ticked when the guide re-renders (e.g. after "Check again").
   var loginOpened = {};
 
-  function isConnectedTo(aiId, mode) {
-    var connection = cached.config.connection;
-    return !!(connection && connection.ai === aiId && (!mode || cached.config.mode === mode));
-  }
-
-  function statusLine() {
+  function statusSlot() {
     return el('div', { class: 'notice-slot' });
   }
 
-  // Report into a statusLine(): what happened, and (optionally) how to fix it.
+  // Report into a statusSlot(): what happened, and (optionally) how to fix it.
   // No tone clears it.
-  function setStatus(line, tone, title, text) {
-    window.UI.setNotice(line, tone, { title: title, text: text });
+  function setStatus(slot, tone, title, text) {
+    window.UI.setNotice(slot, tone, { title: title, text: text });
   }
 
-  function openConnect(startAt) {
-    if (!served || !cached) return openStartHelper();
-    var view = el('div', { class: 'ai-view' });
-    var current = function () {};
-    mount([view]);
+  function methodModeIs(method, mode) {
+    return method.id === 'agent' ? mode === 'agent' : mode === 'api';
+  }
 
-    // The helper stopped answering entirely (its terminal window got closed,
-    // the process died, …) rather than replying with an error. There's
-    // nothing left to click here — go back to the "start Pool" screen so
-    // it can be relaunched, instead of leaving a dead guide on screen.
-    function helperLost() {
-      closeModal();
-      openStartHelper();
+  function guideInto(pane, ai) {
+    var connection = cached.config.connection;
+    var connectedHere = connection && connection.ai === ai.id;
+    var method = ai.methods.find(function (m) { return m.id === ui.method[ai.id]; })
+      || (connectedHere && ai.methods.find(function (m) { return methodModeIs(m, cached.config.mode); }))
+      || ai.methods[0];
+    if (ai.methods.length > 1) {
+      pane.appendChild(el('div', { class: 'ai-segment', role: 'group', 'aria-label': 'How to connect' }, ai.methods.map(function (m) {
+        return el('button', {
+          class: 'ai-segment-btn',
+          type: 'button',
+          'aria-pressed': String(m === method),
+          text: m.id === 'key' ? 'Use an API key' : 'Use my ' + m.label,
+          onclick: function () { ui.method[ai.id] = m.id; renderPane(); },
+        });
+      })));
     }
+    if (connection && !connectedHere) {
+      pane.appendChild(el('p', { class: 'ai-hint cp-replaces', text: 'Connecting this replaces ' + (aiLabel(cached.config) || connection.label) + '.' }));
+    }
+    if (connectedHere && methodModeIs(method, cached.config.mode)) return connectedInto(pane);
 
-    var busy = false;
-    // doneStep, when given, is ticked on success and left on screen for a
-    // moment before the guide gives way to the "Connected" view.
-    function connectWith(update, status, button, doneStep) {
-      if (busy) return;
-      busy = true;
-      button.disabled = true;
-      setStatus(status, 'info', update.mode === 'agent' ? 'Checking it answers…' : 'Checking it can see images…', update.mode === 'agent' ? 'This can take up to a minute.' : null);
-      api('POST', '/api/connect', update).then(function (r) {
-        cached = r.status;
-        notify();
-        if (!r.ok) throw new Error(r.message);
-        if (!doneStep) return showConnected(r.message);
+    var steps = method.id === 'agent' ? agentSteps(ai, method)
+      : method.id === 'key' ? keySteps(ai, method)
+      : localSteps(ai, method);
+    pane.appendChild(el('ol', { class: 'ai-steps-list cp-steps' }, steps));
+  }
+
+  // Runs one connection test, ticking `doneStep` and moving on to the
+  // connection when it passes.
+  var busy = false;
+  function connectWith(update, status, button, doneStep) {
+    if (busy) return;
+    busy = true;
+    button.disabled = true;
+    setStatus(status, 'info', update.mode === 'agent' ? 'Checking it answers…' : 'Checking it can see images…', update.mode === 'agent' ? 'This can take up to a minute.' : null);
+    api('POST', '/api/connect', update).then(function (r) {
+      adopt(r.status);
+      notify();
+      if (!r.ok) throw new Error(r.message);
+      renderList();
+      if (doneStep) {
         markStepDone(doneStep);
         setStatus(status, 'success', r.message);
-        var shown = current;
-        setTimeout(function () {
-          if (current === shown) showConnected(r.message);
+        var shown = paneSeq;
+        window.setTimeout(function () {
+          if (shown === paneSeq) renderPane();
         }, 1200);
-      }).catch(function (err) {
-        if (err.helperDown) return helperLost();
-        setStatus(status, 'error', 'Couldn’t connect', err.message);
-      }).then(function () {
-        busy = false;
-        button.disabled = false;
-      });
-    }
-
-    function terminalButton(label, body, status, after) {
-      var button = el('button', { class: 'btn btn-secondary', type: 'button', text: label });
-      button.addEventListener('click', function () {
-        button.disabled = true;
-        api('POST', '/api/terminal', body).then(function (r) {
-          setStatus(status, r.ok ? 'success' : 'error', r.ok ? r.message : 'That didn’t work', r.ok ? null : r.message);
-          if (r.ok && after) after();
-        }, function (err) {
-          if (err.helperDown) return helperLost();
-          setStatus(status, 'error', 'That didn’t work', err.message);
-        }).then(function () { button.disabled = false; });
-      });
-      return button;
-    }
-
-    function checkAgainButton(rerender) {
-      var button = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Check again' });
-      button.addEventListener('click', function () {
-        button.disabled = true;
-        button.textContent = 'Checking…';
-        detectNow(true).then(rerender, rerender);
-      });
-      return button;
-    }
-
-    // -- connected: say so, and offer the obvious next step
-    function showConnected(message) {
-      current = function () {};
-      view.textContent = '';
-      var waiting = cached.inbox ? cached.inbox.captures : 0;
-      var label = cached.config.connection ? cached.config.connection.label : 'your AI';
-      view.appendChild(el('div', { class: 'ai-success' }, [
-        el('span', { class: 'ai-success-mark', 'aria-hidden': 'true' }, [icon('check')]),
-        el('h2', { class: 'add-modal-title', text: 'Connected to ' + label }),
-        el('p', { class: 'ai-lede', text: message }),
-        waiting ? el('p', { class: 'ai-hint', text: (waiting === 1 ? '1 link is' : waiting + ' links are') + ' waiting to be analysed.' }) : null,
-      ]));
-      var actions = [el('button', { class: 'btn btn-secondary', type: 'button', text: 'Done', onclick: closeModal })];
-      if (waiting) {
-        actions.push(el('button', {
-          class: 'btn btn-primary',
-          type: 'button',
-          text: 'Analyse ' + window.UI.plural(waiting, 'link') + ' now',
-          onclick: function () {
-            closeModal();
-            startDrain();
-          },
-        }));
-      }
-      var row = el('div', { class: 'add-modal-actions' }, actions);
-      view.appendChild(row);
-      row.lastChild.focus();
-    }
-
-    // -- the grid of AIs
-    function showGrid() {
-      current = function () { showGrid(); };
-      view.textContent = '';
-      var connection = cached.config.connection;
-      if (connection) {
-        view.appendChild(el('h2', { class: 'add-modal-title', text: 'Switch AI' }));
-        view.appendChild(el('p', { class: 'ai-lede', text: 'You’re connected to ' + connection.label + '. Connecting another replaces it — your library stays as it is.' }));
       } else {
-        view.appendChild(el('h2', { class: 'add-modal-title', text: 'Connect your AI' }));
+        renderPane();
       }
-      var grid = el('div', { class: 'ai-grid' });
-      cached.catalog.forEach(function (ai) {
-        var tag = tagFor(ai);
-        grid.appendChild(el('button', { class: 'ai-card' + (tag === 'Connected' ? ' is-connected' : ''), type: 'button', onclick: function () { showGuide(ai); } }, [
-          el('span', { class: 'ai-card-name', text: ai.name }),
-          el('span', { class: 'ai-card-tag', text: tag }),
-        ]));
-      });
-      grid.appendChild(el('button', { class: 'ai-card', type: 'button', onclick: showOther }, [
-        el('span', { class: 'ai-card-name', text: 'Something else' }),
-        el('span', { class: 'ai-card-tag', text: '' }),
-      ]));
-      view.appendChild(grid);
-      view.appendChild(el('div', { class: 'add-modal-actions' }, [closeButton()]));
-    }
+    }).catch(function (err) {
+      if (err.helperDown) return;
+      setStatus(status, 'error', 'Couldn’t connect', err.message);
+    }).then(function () {
+      busy = false;
+      button.disabled = false;
+    });
+  }
 
-    function guideHeader(title, aiId) {
-      view.textContent = '';
-      view.appendChild(el('button', { class: 'link-btn ai-back', type: 'button', onclick: function () { showGrid(); } }, [icon('back'), 'All AIs']));
-      view.appendChild(el('h2', { class: 'add-modal-title', text: title }));
-      var connection = cached.config.connection;
-      if (connection && connection.ai !== aiId) {
-        view.appendChild(el('p', { class: 'ai-hint', text: 'You’re connected to ' + connection.label + '. Connecting this replaces it.' }));
-      }
-    }
+  function terminalButton(label, body, status, after) {
+    var button = el('button', { class: 'btn btn-secondary', type: 'button', text: label });
+    button.addEventListener('click', function () {
+      button.disabled = true;
+      api('POST', '/api/terminal', body).then(function (r) {
+        setStatus(status, r.ok ? 'success' : 'error', r.ok ? r.message : 'That didn’t work', r.ok ? null : r.message);
+        if (r.ok && after) after();
+      }, function (err) {
+        if (err.helperDown) return;
+        setStatus(status, 'error', 'That didn’t work', err.message);
+      }).then(function () { button.disabled = false; });
+    });
+    return button;
+  }
 
-    // -- one AI's guide
-    function showGuide(ai, methodId) {
-      var method = ai.methods.find(function (m) { return m.id === methodId; }) || ai.methods[0];
-      current = function () { showGuide(ai, method.id); };
-      guideHeader(ai.name, ai.id);
-      if (ai.methods.length > 1) {
-        view.appendChild(el('div', { class: 'ai-segment', role: 'group', 'aria-label': 'How to connect' }, ai.methods.map(function (m) {
-          return el('button', {
-            class: 'ai-segment-btn',
+  function checkAgainButton() {
+    var button = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Check again' });
+    button.addEventListener('click', function () {
+      button.disabled = true;
+      button.textContent = 'Checking…';
+      var done = function () {
+        renderList();
+        renderPane();
+      };
+      detectNow(true).then(done, done);
+    });
+    return button;
+  }
+
+  function agentSteps(ai, m) {
+    var installed = agentInstalled(m.preset);
+    var installStatus = statusSlot();
+    var loginStatus = statusSlot();
+    var connectStatus = statusSlot();
+    var connected = isConnectedTo(ai.id, 'agent');
+    var loginStep, connectStep;
+    var connectBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
+    connectBtn.addEventListener('click', function () {
+      connectWith({ ai: ai.id, mode: 'agent', agent: { preset: m.preset } }, connectStatus, connectBtn, connectStep);
+    });
+    if (!installed) connectBtn.disabled = true;
+    var loginBtn = terminalButton('Log in to ' + m.app, { ai: ai.id, action: 'login' }, loginStatus, function () {
+      loginOpened[ai.id] = true;
+      markStepDone(loginStep);
+    });
+    if (!installed) loginBtn.disabled = true;
+
+    loginStep = step(2, 'Log in', installed && (connected || !!loginOpened[ai.id]), [
+      hint('Needs ' + m.needs.charAt(0).toLowerCase() + m.needs.slice(1)),
+      hint(m.login.steps),
+      el('div', { class: 'ai-row' }, [loginBtn]),
+      loginStatus,
+      hint('Already logged in? Skip to step 3.'),
+    ]);
+    connectStep = step(3, 'Connect', installed && connected, [
+      hint('The library checks ' + m.app + ' answers, then you can analyse.'),
+      el('div', { class: 'ai-row' }, [connectBtn]),
+      connectStatus,
+    ]);
+
+    return [
+      step(1, 'Install ' + m.app, installed, installed ? [] : [
+        hint(m.app + ' is the free app that lets the library use your ' + m.label.toLowerCase() + '.'),
+        el('div', { class: 'ai-row' }, [
+          terminalButton('Install ' + m.app, { ai: ai.id, action: 'install' }, installStatus),
+          checkAgainButton(),
+        ]),
+        installStatus,
+        el('p', { class: 'ai-hint' }, [
+          document.createTextNode('Or run it yourself: '),
+          el('code', { class: 'ai-code-inline', text: m.install }),
+          document.createTextNode(' · '),
+          extLink(m.docs, 'install guide'),
+        ]),
+      ]),
+      loginStep,
+      connectStep,
+    ];
+  }
+
+  // Where a pasted key ends up, said plainly — see scripts/ai/secrets.js.
+  function keyPromise() {
+    return 'Kept in ' + (cached.keyStore || 'a private store on this computer') + ' — never in the library folder, never in the browser, and only ever sent to this provider over https.';
+  }
+
+  function keySteps(ai, m) {
+    var provider = cached.presets.providers.find(function (p) { return p.id === m.provider; });
+    var status = statusSlot();
+    var key = el('input', { class: 'add-modal-input ai-mono', type: 'password', autocomplete: 'off', 'aria-label': 'API key', placeholder: hasEnvKey(m.provider) ? 'Found $' + provider.keyEnv + ' — leave empty to use it' : 'Paste your API key' });
+    var next = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Continue' });
+    var chooser = el('div', { class: 'ai-row', hidden: 'hidden' });
+    var connectStep;
+    next.addEventListener('click', function () {
+      next.disabled = true;
+      setStatus(status, 'info', 'Checking the key…');
+      api('POST', '/api/models', { mode: 'api', api: { provider: m.provider, apiKey: key.value } }).then(function (r) {
+        setStatus(status, null);
+        if (!r.models.length) throw new Error('No models were listed for this key.');
+        chooser.textContent = '';
+        var select = el('select', { class: 'add-modal-input', 'aria-label': 'Model' }, r.models.map(function (id) {
+          return el('option', { value: id, text: id });
+        }));
+        select.value = r.suggested || r.models[0];
+        var connectBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
+        connectBtn.addEventListener('click', function () {
+          connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, apiKey: key.value, model: select.value } }, status, connectBtn, connectStep);
+        });
+        chooser.appendChild(select);
+        chooser.appendChild(connectBtn);
+        chooser.hidden = false;
+      }).catch(function (err) {
+        if (err.helperDown) return;
+        setStatus(status, 'error', 'Couldn’t check the key', err.message);
+      }).then(function () { next.disabled = false; });
+    });
+    return [
+      step(1, 'Get an API key', hasEnvKey(m.provider), [
+        el('p', { class: 'ai-hint' }, [
+          document.createTextNode('Create one in your ' + provider.label.replace(/ \(.*\)$/, '') + ' account. '),
+          extLink(m.keyUrl, 'Get a key'),
+        ]),
+      ]),
+      connectStep = step(2, 'Paste it and pick a model', isConnectedTo(ai.id, 'api'), [
+        el('div', { class: 'ai-row' }, [key, next]),
+        chooser,
+        status,
+        hint(keyPromise()),
+      ]),
+    ];
+  }
+
+  function localSteps(ai, m) {
+    var server = localServer(m.provider);
+    var running = !!(server && server.running);
+    var models = running ? server.models : [];
+    var status = statusSlot();
+    var pullStatus = statusSlot();
+    var select = el('select', { class: 'add-modal-input', 'aria-label': 'Model' }, models.map(function (id) {
+      return el('option', { value: id, text: id });
+    }));
+    if (server && server.suggested) select.value = server.suggested;
+    var connectStep;
+    var connectBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
+    connectBtn.addEventListener('click', function () {
+      connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, model: select.value } }, status, connectBtn, connectStep);
+    });
+    if (!models.length) connectBtn.disabled = true;
+
+    var modelStepBody = !running ? [hint('Do step 1 first.')]
+      : m.pull.length ? [
+        hint('The library needs a model that can see images. Download one (a few GB):'),
+        el('div', { class: 'ai-row' }, m.pull.map(function (name) {
+          return terminalButton(name, { ai: ai.id, action: 'pull', arg: name }, pullStatus);
+        }).concat([checkAgainButton()])),
+        pullStatus,
+      ]
+      : [hint(m.startHint), el('div', { class: 'ai-row' }, [checkAgainButton()])];
+
+    return [
+      step(1, 'Install and open ' + m.label, running, running ? [] : [
+        el('p', { class: 'ai-hint' }, [
+          extLink(m.download, 'Download ' + m.label),
+          document.createTextNode(' — free. ' + (m.pull.length ? m.startHint : 'Then open it.')),
+        ]),
+        el('div', { class: 'ai-row' }, [checkAgainButton()]),
+      ]),
+      step(2, 'Get a model that can see images', running && models.length > 0, modelStepBody),
+      connectStep = step(3, 'Choose it and connect', running && isConnectedTo(ai.id, 'api'), models.length ? [el('div', { class: 'ai-row' }, [select, connectBtn]), status] : [hint('Your downloaded models will appear here.')]),
+    ];
+  }
+
+  // ---- connected: the connection itself ------------------------------------------------
+  //
+  // Which AI and model, a model dropdown, Disconnect — and, when links are
+  // waiting, a quieter box offering to analyse them.
+
+  function connectedInto(pane) {
+    var connection = cached.config.connection;
+    var config = cached.config;
+    var described = window.LinkStatus.describeAi(config);
+    var since = window.UI.timeAgo(connection.at);
+    var running = window.LibraryAI.drain.running;
+    var block = el('div', { class: 'cp-connected' });
+    block.appendChild(el('div', { class: 'cp-connected-head' }, [
+      el('span', { class: 'ai-success-mark cp-ok', 'aria-hidden': 'true' }, [icon('check')]),
+      el('div', {}, [
+        el('p', { class: 'cp-connected-title', text: 'Connected · ' + (aiLabel(config) || connection.label) }),
+        hint(describeConnection() + (since ? ' · connected ' + since : '')),
+      ]),
+    ]));
+    if (described && described.canChange) modelPicker(block, config, running);
+    block.appendChild(el('div', { class: 'cp-connected-foot' }, [
+      el('button', {
+        class: 'btn btn-secondary btn-sm btn-danger-quiet',
+        type: 'button',
+        text: 'Disconnect',
+        disabled: running,
+        title: running ? 'Stop analysing first' : null,
+        onclick: function () { disconnect(connection.label); },
+      }),
+    ]));
+    pane.appendChild(block);
+
+    var waiting = cached.inbox ? cached.inbox.captures : 0;
+    if (waiting) {
+      pane.appendChild(el('div', { class: 'cp-handoff' }, [
+        el('p', { class: 'cp-handoff-text', text: window.UI.plural(waiting, 'link') + (waiting === 1 ? ' is' : ' are') + ' waiting to be analysed.' }),
+        el('div', { class: 'cp-handoff-actions' }, [
+          el('button', {
+            class: 'btn btn-secondary btn-sm',
             type: 'button',
-            'aria-pressed': String(m === method),
-            text: m.id === 'key' ? 'Use an API key' : 'Use my ' + m.label,
-            onclick: function () { showGuide(ai, m.id); },
-          });
-        })));
-      }
-      var rerender = function () { showGuide(ai, method.id); };
-      if (!found && method.id !== 'key') {
-        view.appendChild(el('p', { class: 'ai-hint ai-checking', text: 'Checking what’s on this computer…' }));
-        view.appendChild(el('div', { class: 'add-modal-actions' }, [closeButton()]));
-        return;
-      }
-      var steps = method.id === 'agent' ? agentSteps(ai, method, rerender)
-        : method.id === 'key' ? keySteps(ai, method)
-        : localSteps(ai, method, rerender);
-      view.appendChild(el('ol', { class: 'ai-steps-list' }, steps));
-      view.appendChild(el('div', { class: 'add-modal-actions' }, [closeButton()]));
-    }
-
-    function agentSteps(ai, m, rerender) {
-      var installed = agentInstalled(m.preset);
-      var installStatus = statusLine();
-      var loginStatus = statusLine();
-      var connectStatus = statusLine();
-      var connected = isConnectedTo(ai.id, 'agent');
-      var loginStep, connectStep;
-      var connectBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
-      connectBtn.addEventListener('click', function () {
-        connectWith({ ai: ai.id, mode: 'agent', agent: { preset: m.preset } }, connectStatus, connectBtn, connectStep);
-      });
-      if (!installed) connectBtn.disabled = true;
-      var loginBtn = terminalButton('Log in to ' + m.app, { ai: ai.id, action: 'login' }, loginStatus, function () {
-        loginOpened[ai.id] = true;
-        markStepDone(loginStep);
-      });
-      if (!installed) loginBtn.disabled = true;
-
-      loginStep = step(2, 'Log in', installed && (connected || !!loginOpened[ai.id]), [
-        el('p', { class: 'ai-hint', text: 'Needs ' + m.needs.charAt(0).toLowerCase() + m.needs.slice(1) }),
-        el('p', { class: 'ai-hint', text: m.login.steps }),
-        el('div', { class: 'ai-row' }, [loginBtn]),
-        loginStatus,
-        el('p', { class: 'ai-hint', text: 'Already logged in? Skip to step 3.' }),
-      ]);
-      connectStep = step(3, 'Connect', installed && connected, [
-        el('p', { class: 'ai-hint', text: 'The library checks ' + m.app + ' answers, then you can analyse.' }),
-        el('div', { class: 'ai-row' }, [connectBtn]),
-        connectStatus,
-      ]);
-
-      return [
-        step(1, 'Install ' + m.app, installed, installed ? [] : [
-          el('p', { class: 'ai-hint', text: m.app + ' is the free app that lets the library use your ' + m.label.toLowerCase() + '.' }),
-          el('div', { class: 'ai-row' }, [
-            terminalButton('Install ' + m.app, { ai: ai.id, action: 'install' }, installStatus),
-            checkAgainButton(rerender),
-          ]),
-          installStatus,
-          el('p', { class: 'ai-hint' }, [
-            document.createTextNode('Or run it yourself: '),
-            el('code', { class: 'ai-code-inline', text: m.install }),
-            document.createTextNode(' · '),
-            extLink(m.docs, 'install guide'),
-          ]),
+            text: 'Analyse ' + window.UI.plural(waiting, 'link'),
+            disabled: running,
+            onclick: function () {
+              closeModal();
+              startDrain();
+            },
+          }),
         ]),
-        loginStep,
-        connectStep,
-      ];
-    }
-
-    // Where a pasted key ends up, said plainly — see scripts/ai/secrets.js.
-    function keyPromise() {
-      return 'Kept in ' + (cached.keyStore || 'a private store on this computer') + ' — never in the library folder, never in the browser, and only ever sent to this provider over https.';
-    }
-
-    function keySteps(ai, m) {
-      var provider = cached.presets.providers.find(function (p) { return p.id === m.provider; });
-      var status = statusLine();
-      var key = el('input', { class: 'add-modal-input ai-mono', type: 'password', autocomplete: 'off', 'aria-label': 'API key', placeholder: hasEnvKey(m.provider) ? 'Found $' + provider.keyEnv + ' — leave empty to use it' : 'Paste your API key' });
-      var next = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Continue' });
-      var chooser = el('div', { class: 'ai-row', hidden: 'hidden' });
-      var connectStep;
-      next.addEventListener('click', function () {
-        next.disabled = true;
-        setStatus(status, 'info', 'Checking the key…');
-        api('POST', '/api/models', { mode: 'api', api: { provider: m.provider, apiKey: key.value } }).then(function (r) {
-          setStatus(status, null);
-          if (!r.models.length) throw new Error('No models were listed for this key.');
-          chooser.textContent = '';
-          var select = el('select', { class: 'add-modal-input', 'aria-label': 'Model' }, r.models.map(function (id) {
-            return el('option', { value: id, text: id });
-          }));
-          select.value = r.suggested || r.models[0];
-          var connectBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
-          connectBtn.addEventListener('click', function () {
-            connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, apiKey: key.value, model: select.value } }, status, connectBtn, connectStep);
-          });
-          chooser.appendChild(select);
-          chooser.appendChild(connectBtn);
-          chooser.hidden = false;
-        }).catch(function (err) {
-          setStatus(status, 'error', 'Couldn’t check the key', err.message);
-        }).then(function () { next.disabled = false; });
-      });
-      return [
-        step(1, 'Get an API key', hasEnvKey(m.provider), [
-          el('p', { class: 'ai-hint' }, [
-            document.createTextNode('Create one in your ' + provider.label.replace(/ \(.*\)$/, '') + ' account. You pay per use. '),
-            extLink(m.keyUrl, 'Get a key'),
-          ]),
-        ]),
-        connectStep = step(2, 'Paste it and pick a model', isConnectedTo(ai.id, 'api'), [
-          el('div', { class: 'ai-row' }, [key, next]),
-          chooser,
-          status,
-          el('p', { class: 'ai-hint', text: keyPromise() }),
-        ]),
-      ];
-    }
-
-    function localSteps(ai, m, rerender) {
-      var server = localServer(m.provider);
-      var running = !!(server && server.running);
-      var models = running ? server.models : [];
-      var status = statusLine();
-      var pullStatus = statusLine();
-      var select = el('select', { class: 'add-modal-input', 'aria-label': 'Model' }, models.map(function (id) {
-        return el('option', { value: id, text: id });
-      }));
-      if (server && server.suggested) select.value = server.suggested;
-      var connectStep;
-      var connectBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
-      connectBtn.addEventListener('click', function () {
-        connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, model: select.value } }, status, connectBtn, connectStep);
-      });
-      if (!models.length) connectBtn.disabled = true;
-
-      var modelStepBody = !running ? [el('p', { class: 'ai-hint', text: 'Do step 1 first.' })]
-        : m.pull.length ? [
-          el('p', { class: 'ai-hint', text: 'The library needs a model that can see images. Download one (a few GB):' }),
-          el('div', { class: 'ai-row' }, m.pull.map(function (name) {
-            return terminalButton(name, { ai: ai.id, action: 'pull', arg: name }, pullStatus);
-          }).concat([checkAgainButton(rerender)])),
-          pullStatus,
-        ]
-        : [el('p', { class: 'ai-hint', text: m.startHint }), el('div', { class: 'ai-row' }, [checkAgainButton(rerender)])];
-
-      return [
-        step(1, 'Install and open ' + m.label, running, running ? [] : [
-          el('p', { class: 'ai-hint' }, [
-            extLink(m.download, 'Download ' + m.label),
-            document.createTextNode(' — free. ' + (m.pull.length ? m.startHint : 'Then open it.')),
-          ]),
-          el('div', { class: 'ai-row' }, [checkAgainButton(rerender)]),
-        ]),
-        step(2, 'Get a model that can see images', running && models.length > 0, modelStepBody),
-        connectStep = step(3, 'Choose it and connect', running && isConnectedTo(ai.id, 'api'), models.length ? [el('div', { class: 'ai-row' }, [select, connectBtn]), status] : [el('p', { class: 'ai-hint', text: 'Your downloaded models will appear here.' })]),
-      ];
-    }
-
-    // -- anything not in the list
-    function showOther() {
-      current = showOther;
-      guideHeader('Something else');
-      var cmdStatus = statusLine();
-      var cmd = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Agent command', placeholder: 'e.g. my-agent --headless -p' });
-      var cmdBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
-      cmdBtn.addEventListener('click', function () {
-        connectWith({ ai: 'other', mode: 'agent', agent: { preset: 'custom', command: cmd.value } }, cmdStatus, cmdBtn);
-      });
-      var srvStatus = statusLine();
-      var base = el('input', { class: 'add-modal-input ai-mono', type: 'url', spellcheck: 'false', 'aria-label': 'Base URL', placeholder: 'https://…/v1' });
-      var key = el('input', { class: 'add-modal-input ai-mono', type: 'password', autocomplete: 'off', 'aria-label': 'API key', placeholder: 'API key (if it needs one)' });
-      var model = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Model', placeholder: 'Model name' });
-      var srvBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
-      srvBtn.addEventListener('click', function () {
-        connectWith({ ai: 'other', mode: 'api', api: { provider: 'custom', baseUrl: base.value, apiKey: key.value, model: model.value } }, srvStatus, srvBtn);
-      });
-      view.appendChild(el('ol', { class: 'ai-steps-list' }, [
-        step('A', 'An agent command', false, [
-          el('p', { class: 'ai-hint', text: 'It must run without asking questions; the instructions are added as its last argument.' }),
-          el('div', { class: 'ai-row' }, [cmd, cmdBtn]),
-          cmdStatus,
-        ]),
-        step('B', 'An OpenAI-compatible server', false, [base, key, el('div', { class: 'ai-row' }, [model, srvBtn]), srvStatus, el('p', { class: 'ai-hint', text: 'A key is kept in ' + (cached.keyStore || 'a private store on this computer') + ', and only sent to this server over https (plain http only to this computer).' })]),
       ]));
-      view.appendChild(el('div', { class: 'add-modal-actions' }, [closeButton()]));
     }
+  }
 
-    showGrid();
-    detectNow().then(function () {
-      if (document.body.contains(view)) current();
-    }, function () { /* the guides still work without detection */ });
+  // Picks the model this AI drains with. An agent app gets "its own default"
+  // plus its models (or a typed name); an API gets its model list.
+  function modelPicker(block, config, running) {
+    var agentMode = config.mode === 'agent';
+    var current = agentMode ? config.agent.model || '' : config.api.model;
+    var OTHER_MODEL = '\u0000other';
+    var status = statusSlot();
+    var select = el('select', { class: 'add-modal-input', 'aria-label': 'Model', hidden: 'hidden' });
+    var typed = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Model name', placeholder: 'Model name', hidden: 'hidden' });
+    var save = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Use this model', disabled: true });
+    block.appendChild(el('label', { class: 'add-modal-label', text: 'Model' }));
+    block.appendChild(el('div', { class: 'ai-row' }, [select, typed, save]));
+    block.appendChild(status);
+
+    function chosen() {
+      return select.hidden || select.value === OTHER_MODEL ? typed.value.trim() : select.value;
+    }
+    function changed() {
+      save.disabled = running || chosen() === current || (!agentMode && !chosen());
+    }
+    select.addEventListener('change', function () {
+      typed.hidden = select.value !== OTHER_MODEL;
+      if (!typed.hidden) typed.focus();
+      changed();
+    });
+    typed.addEventListener('input', changed);
+
+    api('POST', '/api/models', { mode: config.mode }).then(function (r) {
+      var options = r.models.map(function (m) {
+        return typeof m === 'string' ? { id: m, label: m } : m;
+      });
+      var free = agentMode ? r.free : true;
+      if (agentMode) options.unshift({ id: '', label: 'Its own default' });
+      if (current && !options.some(function (o) { return o.id === current; })) options.push({ id: current, label: current });
+      if (free) options.push({ id: OTHER_MODEL, label: 'Other…' });
+      options.forEach(function (o) {
+        select.appendChild(el('option', { value: o.id, text: o.label }));
+      });
+      select.value = current;
+      select.hidden = false;
+      changed();
+    }, function (err) {
+      if (err.helperDown) return;
+      // No list to pick from (the key or server can't list models): a typed
+      // name still works.
+      typed.hidden = false;
+      typed.value = current;
+      window.UI.setNotice(status, 'warning', { title: 'Couldn’t list models', text: err.message + ' Type a model name instead.' });
+      changed();
+    });
+
+    save.addEventListener('click', function () {
+      var model = chosen();
+      save.disabled = true;
+      setStatus(status, 'info', agentMode ? 'Checking it answers…' : 'Checking it can see images…', agentMode ? 'This can take up to a minute.' : null);
+      setModel(model).then(function (r) {
+        window.UI.toast(r.message);
+        renderPane();
+      }).catch(function (err) {
+        if (err.helperDown) return;
+        setStatus(status, 'error', 'Couldn’t switch model', err.message + ' Still using the previous model.');
+        save.disabled = false;
+      });
+    });
+  }
+
+  function disconnect(label) {
+    api('POST', '/api/disconnect', {}).then(function (next) {
+      adopt(next);
+      notify();
+      renderList();
+      renderPane();
+      window.UI.toast('Disconnected from ' + label + '. Your library is unchanged.');
+    }, function (err) {
+      if (err.helperDown) return;
+      window.UI.toast('Couldn’t disconnect: ' + err.message);
+    });
+  }
+
+  // ---- something else: any agent command, or an OpenAI-compatible server ------------------
+
+  function otherInto(pane) {
+    pane.appendChild(el('div', { class: 'ai-segment', role: 'group', 'aria-label': 'Kind' }, [
+      ['agent', 'Agent command'], ['server', 'OpenAI-compatible server'],
+    ].map(function (k) {
+      return el('button', {
+        class: 'ai-segment-btn',
+        type: 'button',
+        'aria-pressed': String(ui.otherKind === k[0]),
+        text: k[1],
+        onclick: function () { ui.otherKind = k[0]; renderPane(); },
+      });
+    })));
+    var status = statusSlot();
+    var button = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
+    var form = el('div', { class: 'cp-other' });
+    if (ui.otherKind === 'agent') {
+      var cmd = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Agent command', placeholder: 'e.g. my-agent --headless -p' });
+      button.addEventListener('click', function () {
+        connectWith({ ai: 'other', mode: 'agent', agent: { preset: 'custom', command: cmd.value } }, status, button);
+      });
+      form.appendChild(el('label', { class: 'add-modal-label', text: 'Command' }));
+      form.appendChild(cmd);
+      form.appendChild(hint('It must run without asking questions; the instructions are added as its last argument.'));
+    } else {
+      var base = el('input', { class: 'add-modal-input ai-mono', type: 'url', spellcheck: 'false', 'aria-label': 'Base URL', placeholder: 'https://…/v1' });
+      var model = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Model', placeholder: 'Model name' });
+      var key = el('input', { class: 'add-modal-input ai-mono', type: 'password', autocomplete: 'off', 'aria-label': 'API key', placeholder: 'Only if the server needs one' });
+      button.addEventListener('click', function () {
+        connectWith({ ai: 'other', mode: 'api', api: { provider: 'custom', baseUrl: base.value, apiKey: key.value, model: model.value } }, status, button);
+      });
+      form.appendChild(el('label', { class: 'add-modal-label', text: 'Server address' }));
+      form.appendChild(base);
+      form.appendChild(el('label', { class: 'add-modal-label', text: 'Model' }));
+      form.appendChild(model);
+      form.appendChild(el('label', { class: 'add-modal-label', text: 'API key (optional)' }));
+      form.appendChild(key);
+      form.appendChild(hint('A key is kept in ' + (cached.keyStore || 'a private store on this computer') + ', and only sent to this server over https (plain http only to this computer).'));
+    }
+    form.appendChild(el('div', { class: 'add-modal-actions' }, [button]));
+    form.appendChild(status);
+    pane.appendChild(form);
   }
 
   // ---- Drain ---------------------------------------------------------------------
