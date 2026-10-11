@@ -219,6 +219,12 @@ add a bespoke button style.
   buttons (`<a class="btn">`) never underline. Icon-only buttons are 30px squares at 7px radius.
 - **Primary** (`.btn-primary`): filled white, black ink, `brightness(1.08)` on hover — the one
   main action of a surface.
+- **One primary per screen:** exactly one primary button is on screen at a time — the next thing
+  to do. Everything else visible is secondary, and the primary moves forward as steps complete (a
+  guide's step renderer applies this: the first unfinished step you can act on owns it). A step
+  that can't be verified, like logging in, stays on show beside it as a secondary. After a failure
+  the primary becomes **Try again**; when the fix is a step already on screen, the notice points
+  to that step instead of repeating its button.
 - **Secondary** (`.btn-secondary`): graphite fill, hairline-strong border, white text; hover
   lifts the border and fill. The default for everything that isn't the main action — header
   buttons, modal Cancel/Close, Copy/Download, tile actions.

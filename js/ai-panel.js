@@ -182,7 +182,9 @@
   var found = null; // what detection saw: { agents, local, envKeys }
   var scanning = false;
   var win = null; // { overlay, modal, list, pane, filter, phase, timer }
-  var ui = { selected: null, query: '', method: {}, otherKind: 'agent' };
+  // tried: the last failed connect per AI ({ message, loggedOut }), so the
+  // notice and "Try again" survive the pane being rebuilt.
+  var ui = { selected: null, query: '', method: {}, otherKind: 'agent', tried: {} };
   var paneSeq = 0; // changes whenever the pane is rebuilt, so late callbacks can tell
 
   function helperUp() {
@@ -654,13 +656,61 @@
 
   // Ticks a step off in place — when a login window opens or a connection
   // passes, without re-rendering the guide.
-  function markStepDone(li) {
-    if (li.classList.contains('is-done')) return;
+  function tickStep(li) {
     li.classList.add('is-done');
     var mark = li.querySelector('.ai-step-mark');
     mark.textContent = '';
     mark.appendChild(icon('check'));
+  }
+
+  function markStepDone(li) {
+    if (li.classList.contains('is-done')) return;
+    tickStep(li);
     li.querySelector('.ai-step-title').textContent += ' — done';
+  }
+
+  // The step renderer: the one place the one-primary-button rule is applied.
+  // The subscription flow goes through it; the key and local flows move onto it
+  // in their own ticket.
+  //
+  // A step is { title, done, alsoOpen, handedOff, body: [nodes], actions: [{
+  // label, run, disabled }] }. The current step is the first unfinished one you
+  // can act on (a step that's only a link, like "get a key", has no actions and
+  // doesn't hold the primary button back). Its first action is primary; every
+  // other visible action is secondary. A finished step collapses to a ticked
+  // one-line title, unless it can't be verified (log in, connect): `alsoOpen`
+  // keeps it on show beside the current step, with secondary buttons.
+  // `handedOff` is for a step that can't be ticked but has been acted on (the
+  // app was opened to log in): it stays unticked and on show, yet no longer
+  // holds the primary button.
+  function stepList(steps) {
+    var current = steps.findIndex(function (s) { return !s.done && !s.handedOff && s.actions && s.actions.length; });
+    if (current < 0) current = steps.findIndex(function (s) { return !s.done; });
+    return el('ol', { class: 'ai-steps-list cp-steps' }, steps.map(function (s, i) {
+      var open = !s.done || s.alsoOpen;
+      var children = [el('p', { class: 'ai-step-title', text: s.title })];
+      if (open) {
+        (s.body || []).forEach(function (node) { if (node) children.push(node); });
+        var actions = (s.actions || []).map(function (a, j) {
+          var button = el('button', {
+            class: 'btn ' + (i === current && j === 0 ? 'btn-primary' : 'btn-secondary'),
+            type: 'button',
+            text: a.label,
+          });
+          if (a.disabled) button.disabled = true;
+          button.addEventListener('click', function () { a.run(button); });
+          return button;
+        });
+        if (actions.length) children.push(el('div', { class: 'ai-row' }, actions));
+        if (s.slot) children.push(s.slot);
+      }
+      var li = el('li', { class: 'ai-step' + (s.done && !s.alsoOpen ? ' is-collapsed' : ''), 'data-step': String(i + 1) }, [
+        el('span', { class: 'ai-step-mark', 'aria-hidden': 'true', text: String(i + 1) }),
+        el('div', { class: 'ai-step-body' }, children),
+      ]);
+      if (s.done) tickStep(li);
+      return li;
+    }));
   }
 
   // AIs whose login window has been opened this session, so step 2 stays
@@ -688,12 +738,13 @@
       || (connectedHere && ai.methods.find(function (m) { return methodModeIs(m, cached.config.mode); }))
       || ai.methods[0];
     if (ai.methods.length > 1) {
-      pane.appendChild(el('div', { class: 'ai-segment', role: 'group', 'aria-label': 'How to connect' }, ai.methods.map(function (m) {
+      pane.appendChild(el('div', { class: 'ai-segment', role: 'tablist', 'aria-label': 'How to connect' }, ai.methods.map(function (m) {
         return el('button', {
           class: 'ai-segment-btn',
           type: 'button',
-          'aria-pressed': String(m === method),
-          text: m.id === 'key' ? 'Use an API key' : 'Use my ' + m.label,
+          role: 'tab',
+          'aria-selected': String(m === method),
+          text: m.label,
           onclick: function () { ui.method[ai.id] = m.id; renderPane(); },
         });
       })));
@@ -703,24 +754,43 @@
     }
     if (connectedHere && methodModeIs(method, cached.config.mode)) return connectedInto(pane);
 
-    var steps = method.id === 'agent' ? agentSteps(ai, method)
-      : method.id === 'key' ? keySteps(ai, method)
-      : localSteps(ai, method);
+    // The agent flow describes its steps as data for the renderer; the key
+    // and local flows still build their own list.
+    if (method.id === 'agent') {
+      pane.appendChild(stepList(agentSteps(ai, method)));
+      // A failed connect's notice is brought into view, not left below the fold.
+      var failure = pane.querySelector('.notice.is-error');
+      if (failure) window.requestAnimationFrame(function () { failure.scrollIntoView({ block: 'nearest' }); });
+      return;
+    }
+    var steps = method.id === 'key' ? keySteps(ai, method) : localSteps(ai, method);
     pane.appendChild(el('ol', { class: 'ai-steps-list cp-steps' }, steps));
   }
 
   // Runs one connection test, ticking `doneStep` and moving on to the
   // connection when it passes.
+  // options: { app } names the agent app in "Checking {app} answers…";
+  // { onFail(err) } takes over showing a failure (err.result is the helper's
+  // answer, so it can tell a lost login from anything else).
   var busy = false;
-  function connectWith(update, status, button, doneStep) {
+  function connectWith(update, status, button, doneStep, options) {
+    options = options || {};
     if (busy) return;
     busy = true;
     button.disabled = true;
-    setStatus(status, 'info', update.mode === 'agent' ? 'Checking it answers…' : 'Checking it can see images…', update.mode === 'agent' ? 'This can take up to a minute.' : null);
+    setStatus(status, 'info', update.mode === 'agent' ? 'Checking ' + (options.app || 'it') + ' answers…' : 'Checking it can see images…', update.mode === 'agent' ? 'This can take up to a minute.' : null);
     api('POST', '/api/connect', update).then(function (r) {
       adopt(r.status);
       notify();
-      if (!r.ok) throw new Error(r.message);
+      if (!r.ok) {
+        var failed = new Error(r.message);
+        failed.result = r;
+        throw failed;
+      }
+      if (update.mode === 'agent' && update.agent && update.ai) {
+        delete ui.tried[update.ai];
+        rememberSignedIn(update.agent.preset, 'yes');
+      }
       renderList();
       if (doneStep) {
         markStepDone(doneStep);
@@ -734,16 +804,125 @@
       }
     }).catch(function (err) {
       if (err.helperDown) return;
-      setStatus(status, 'error', 'Couldn’t connect', err.message);
+      if (options.onFail) options.onFail(err);
+      else setStatus(status, 'error', 'Couldn’t connect', err.message);
     }).then(function () {
       busy = false;
       button.disabled = false;
     });
   }
 
+  // What detection last said about an agent app's login, kept current from
+  // what this window has just seen (a pass, or a login prompt).
+  function rememberSignedIn(preset, state) {
+    var a = found && found.agents.find(function (x) { return x.id === preset; });
+    if (a) a.signedIn = state;
+  }
+
   function terminalButton(label, body, status, after) {
     var button = el('button', { class: 'btn btn-secondary', type: 'button', text: label });
-    button.addEventListener('click', function () {
+    var run = terminalRun(body, status, after);
+    button.addEventListener('click', function () { run(button); });
+    return button;
+  }
+
+  function checkAgainButton() {
+    var button = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Check again' });
+    button.addEventListener('click', function () { checkAgainRun(button); });
+    return button;
+  }
+
+  // Install → log in → connect, for an AI that runs through its own app.
+  // Log in and connect can't be verified from here, so they stay on show
+  // (alsoOpen) beside whichever step is current, as secondary buttons.
+  function agentSteps(ai, m) {
+    var installed = agentInstalled(m.preset);
+    var agent = found && found.agents.find(function (x) { return x.id === m.preset; });
+    var signedIn = agent ? agent.signedIn || 'unknown' : 'unknown';
+    var connected = isConnectedTo(ai.id, 'agent');
+    var loggedIn = connected || signedIn === 'yes';
+    var opened = !!loginOpened[ai.id];
+    var tried = ui.tried[ai.id];
+    var installStatus = statusSlot();
+    var loginStatus = statusSlot();
+    var connectStatus = statusSlot();
+
+    var steps = [
+      {
+        title: installed ? m.app + ' is installed' : 'Install ' + m.app,
+        done: installed,
+        body: [
+          hint(m.app + ' is the app that lets the library use your ' + m.label.toLowerCase() + '.'),
+          el('p', { class: 'ai-hint' }, [
+            document.createTextNode('Or run it yourself: '),
+            el('code', { class: 'ai-code-inline', text: m.install }),
+            document.createTextNode(' · '),
+            extLink(m.docs, 'install guide'),
+          ]),
+        ],
+        actions: [
+          { label: 'Install ' + m.app, run: terminalRun({ ai: ai.id, action: 'install' }, installStatus) },
+          { label: 'Check again', run: checkAgainRun },
+        ],
+        slot: installStatus,
+      },
+      {
+        title: loggedIn ? 'Logged in to ' + m.app : 'Log in to ' + m.app,
+        done: loggedIn,
+        alsoOpen: !loggedIn,
+        handedOff: installed && opened,
+        body: [
+          hint('Needs ' + m.needs.charAt(0).toLowerCase() + m.needs.slice(1)),
+          hint(m.login.steps),
+          hint('Already logged in? Just press Connect.'),
+        ],
+        actions: [{
+          label: 'Open ' + m.app + ' to log in',
+          disabled: !installed,
+          run: terminalRun({ ai: ai.id, action: 'login' }, loginStatus, function () {
+            loginOpened[ai.id] = true;
+            renderPane();
+          }),
+        }],
+        slot: loginStatus,
+      },
+      {
+        title: 'Connect',
+        done: connected,
+        alsoOpen: true,
+        body: [hint('Pool checks ' + m.app + ' answers, then you can analyse.')],
+        actions: [{
+          label: tried ? 'Try again' : 'Connect',
+          disabled: !installed,
+          run: function (button) {
+            connectWith({ ai: ai.id, mode: 'agent', agent: { preset: m.preset } }, connectStatus, button, null, {
+              app: m.app,
+              onFail: function (err) {
+                var lost = !!(err.result && err.result.loggedOut);
+                ui.tried[ai.id] = { message: err.message, loggedOut: lost };
+                if (lost) rememberSignedIn(m.preset, 'no');
+                renderPane();
+              },
+            });
+          },
+        }],
+        slot: connectStatus,
+      },
+    ];
+
+    // A failed connect is reported in the connect step. When the fix is the
+    // login step above, the notice points at it instead of repeating its button.
+    if (tried) {
+      setStatus(connectStatus, 'error',
+        tried.loggedOut ? m.app + ' isn’t logged in' : 'Couldn’t connect',
+        tried.loggedOut ? 'Use “Open ' + m.app + ' to log in” above, then press Try again.' : tried.message + ' Press Try again.');
+    }
+    return steps;
+  }
+
+  // Opens a catalog Terminal action from a step button.
+  function terminalRun(body, status, after) {
+    return function (button) {
       button.disabled = true;
       api('POST', '/api/terminal', body).then(function (r) {
         setStatus(status, r.ok ? 'success' : 'error', r.ok ? r.message : 'That didn’t work', r.ok ? null : r.message);
@@ -752,73 +931,17 @@
         if (err.helperDown) return;
         setStatus(status, 'error', 'That didn’t work', err.message);
       }).then(function () { button.disabled = false; });
-    });
-    return button;
+    };
   }
 
-  function checkAgainButton() {
-    var button = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Check again' });
-    button.addEventListener('click', function () {
-      button.disabled = true;
-      button.textContent = 'Checking…';
-      var done = function () {
-        renderList();
-        renderPane();
-      };
-      detectNow(true).then(done, done);
-    });
-    return button;
-  }
-
-  function agentSteps(ai, m) {
-    var installed = agentInstalled(m.preset);
-    var installStatus = statusSlot();
-    var loginStatus = statusSlot();
-    var connectStatus = statusSlot();
-    var connected = isConnectedTo(ai.id, 'agent');
-    var loginStep, connectStep;
-    var connectBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
-    connectBtn.addEventListener('click', function () {
-      connectWith({ ai: ai.id, mode: 'agent', agent: { preset: m.preset } }, connectStatus, connectBtn, connectStep);
-    });
-    if (!installed) connectBtn.disabled = true;
-    var loginBtn = terminalButton('Log in to ' + m.app, { ai: ai.id, action: 'login' }, loginStatus, function () {
-      loginOpened[ai.id] = true;
-      markStepDone(loginStep);
-    });
-    if (!installed) loginBtn.disabled = true;
-
-    loginStep = step(2, 'Log in', installed && (connected || !!loginOpened[ai.id]), [
-      hint('Needs ' + m.needs.charAt(0).toLowerCase() + m.needs.slice(1)),
-      hint(m.login.steps),
-      el('div', { class: 'ai-row' }, [loginBtn]),
-      loginStatus,
-      hint('Already logged in? Skip to step 3.'),
-    ]);
-    connectStep = step(3, 'Connect', installed && connected, [
-      hint('The library checks ' + m.app + ' answers, then you can analyse.'),
-      el('div', { class: 'ai-row' }, [connectBtn]),
-      connectStatus,
-    ]);
-
-    return [
-      step(1, 'Install ' + m.app, installed, installed ? [] : [
-        hint(m.app + ' is the app that lets the library use your ' + m.label.toLowerCase() + '.'),
-        el('div', { class: 'ai-row' }, [
-          terminalButton('Install ' + m.app, { ai: ai.id, action: 'install' }, installStatus),
-          checkAgainButton(),
-        ]),
-        installStatus,
-        el('p', { class: 'ai-hint' }, [
-          document.createTextNode('Or run it yourself: '),
-          el('code', { class: 'ai-code-inline', text: m.install }),
-          document.createTextNode(' · '),
-          extLink(m.docs, 'install guide'),
-        ]),
-      ]),
-      loginStep,
-      connectStep,
-    ];
+  function checkAgainRun(button) {
+    button.disabled = true;
+    button.textContent = 'Checking…';
+    var done = function () {
+      renderList();
+      renderPane();
+    };
+    detectNow(true).then(done, done);
   }
 
   // Where a pasted key ends up, said plainly — see scripts/ai/secrets.js.

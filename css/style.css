@@ -1373,7 +1373,8 @@ kbd,
   color: var(--text);
 }
 
-.ai-segment-btn[aria-pressed='true'] {
+.ai-segment-btn[aria-pressed='true'],
+.ai-segment-btn[aria-selected='true'] {
   background: var(--accent);
   color: var(--accent-ink);
 }
@@ -2751,6 +2752,8 @@ button.ai-line:focus-visible {
 
 /* ---- guides ---- */
 .cp-replaces { margin-top: 14px; }
+/* a finished step is one ticked line */
+.cp-steps .ai-step.is-collapsed .ai-step-title { margin: 3px 0 0; color: var(--text-dim); }
 .cp-steps .ai-step.is-later .ai-step-title { color: var(--text-faint); }
 .cp-steps .ai-step.is-later .ai-step-mark { color: var(--text-faint); border-color: var(--border); }
 .cp-steps .ai-step-body > .ai-hint { margin: 0; }
