@@ -373,3 +373,269 @@ test('an AI that connects two ways has tabs, and connecting another AI says it r
     assert.match(await dialog(app).innerText(), /Connecting this replaces ChatGPT/);
   });
 });
+
+// ---- connecting by API key, local server, or something else ----------------
+
+const NO_COST_TALK = /\b(cost|costs|billing|billed|credit|credits|pay|paid|payment|price|pricing|charge|charged)\b/i;
+
+const claudeKeyOnly = (envKeys) => ({
+  agents: [{ id: 'claude', label: 'Claude Code', installed: false, signedIn: 'unknown' }],
+  local: [],
+  envKeys: envKeys || [],
+});
+
+const KEY_MODELS = { models: ['claude-sonnet-5-5', 'claude-opus-5-5'], suggested: 'claude-opus-5-5' };
+
+async function openKeyTab(app) {
+  await openWindow(app);
+  await waitForPane(app, 'Claude');
+  await dialog(app).getByRole('tab', { name: 'API key' }).click();
+}
+
+const keyField = (app) => dialog(app).getByLabel('API key');
+
+test('API key: the paste field is there on arrival, and Check key is primary but disabled until something is typed', async (t) => {
+  const fake = createFakeAi({ detect: claudeKeyOnly(), models: KEY_MODELS });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openKeyTab(app);
+    assert.equal(await keyField(app).isVisible(), true, 'visible without touching Get a key');
+    await assertOnePrimary(app, 'Check key');
+    assert.equal(await buttonNamed(app, 'Check key').isDisabled(), true);
+    assert.equal(await dialog(app).getByRole('link', { name: /Get a key/ }).count(), 1);
+    assert.match(await dialog(app).innerText(), /already have one\? Paste it below/i);
+    assert.equal(await dialog(app).locator('a.btn-primary').count(), 0, 'a link never takes the primary button');
+
+    await keyField(app).fill('sk-test-123');
+    assert.equal(await buttonNamed(app, 'Check key').isDisabled(), false);
+  });
+});
+
+test('API key: Check key → a model dropdown with the suggested default and Connect as the one primary; Connect connects', async (t) => {
+  const fake = createFakeAi({ detect: claudeKeyOnly(), models: KEY_MODELS });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openKeyTab(app);
+    await keyField(app).fill('sk-test-123');
+    await buttonNamed(app, 'Check key').click();
+    const select = dialog(app).getByLabel('Model');
+    await select.waitFor({ timeout: 5000 });
+    assert.equal(await select.inputValue(), 'claude-opus-5-5', 'the suggested model is the default');
+    await assertOnePrimary(app, 'Connect');
+    assert.match(await dialog(app).innerText(), /Kept in .+, never in the library folder or the browser/);
+    assert.equal(fake.calls.find((c) => c.name === 'models').arg.api.apiKey, 'sk-test-123');
+
+    await buttonNamed(app, 'Connect').click();
+    await dialog(app).getByText(/^Connected/).first().waitFor({ timeout: 5000 });
+    const call = fake.calls.filter((c) => c.name === 'connect').pop().arg;
+    assert.deepEqual(call, { ai: 'claude', mode: 'api', api: { provider: 'anthropic', apiKey: 'sk-test-123', model: 'claude-opus-5-5' } });
+  });
+});
+
+test('API key: a key already in the environment shows the first step ticked', async (t) => {
+  const fake = createFakeAi({ detect: claudeKeyOnly(['anthropic']), models: KEY_MODELS });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openKeyTab(app);
+    await dialog(app).getByText('You have an API key').waitFor({ timeout: 5000 });
+    assert.equal(await dialog(app).locator('.ai-step[data-step="1"]').evaluate((n) => n.classList.contains('is-done')), true);
+    await assertOnePrimary(app, 'Check key');
+    assert.equal(await buttonNamed(app, 'Check key').isDisabled(), false, 'nothing to type: the saved key is used');
+  });
+});
+
+test('API key: a rejected key says it did not work and how to fix it — with no cost, billing or credit talk', async (t) => {
+  const fake = createFakeAi({
+    detect: claudeKeyOnly(),
+    models: () => { throw new Error('Your credit balance is too low. Add billing to pay for usage.'); },
+  });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openKeyTab(app);
+    await keyField(app).fill('sk-wrong');
+    await buttonNamed(app, 'Check key').click();
+    const notice = dialog(app).locator('.notice.is-error').first();
+    await notice.waitFor({ timeout: 5000 });
+    assert.match(await notice.innerText(), /That key didn.t work/);
+    assert.match(await notice.innerText(), /copied/i, 'says how to fix it');
+    assert.equal(await notice.locator('button').count(), 0);
+    await assertOnePrimary(app, 'Try again');
+    assert.doesNotMatch(await dialog(app).innerText(), NO_COST_TALK);
+    assert.equal(await keyField(app).inputValue(), 'sk-wrong', 'what was pasted is kept for fixing');
+    assert.equal(await app.page.evaluate(() => document.documentElement.outerHTML.includes('sk-wrong')), false, 'the key is never written into the page markup');
+  });
+});
+
+test('API key: a connect that fails shows the error in the step, with Try again; the retry connects', async (t) => {
+  const fake = createFakeAi({
+    detect: claudeKeyOnly(),
+    models: KEY_MODELS,
+    connect: { ok: false, message: 'HTTP 400: Your credit balance is too low.' },
+  });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openKeyTab(app);
+    await keyField(app).fill('sk-test-123');
+    await buttonNamed(app, 'Check key').click();
+    await dialog(app).getByLabel('Model').waitFor({ timeout: 5000 });
+    await buttonNamed(app, 'Connect').click();
+    await dialog(app).locator('.notice.is-error').first().waitFor({ timeout: 5000 });
+    assert.match(await dialog(app).locator('.notice.is-error').first().innerText(), /That key didn.t work/);
+    assert.doesNotMatch(await dialog(app).innerText(), NO_COST_TALK);
+    await assertOnePrimary(app, 'Try again');
+
+    fake.script({ connect: { ok: true, message: 'Connected.' } });
+    await buttonNamed(app, 'Try again').click();
+    await dialog(app).getByText(/^Connected/).first().waitFor({ timeout: 5000 });
+  });
+});
+
+const ollama = (running, models) => ({
+  agents: [],
+  local: [{ id: 'ollama', label: 'Ollama', running, models: models || [], suggested: (models || [])[0] || '' }],
+  envKeys: [],
+});
+
+async function openOllama(app) {
+  await openWindow(app);
+  await app.page.locator('.cp-row', { hasText: 'Ollama' }).click();
+  await waitForPane(app, 'Ollama');
+}
+
+test('local server: not running → "I’ve opened it — check again" is the one primary; checking again moves on', async (t) => {
+  const fake = createFakeAi({ detect: ollama(false) });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openOllama(app);
+    await assertOnePrimary(app, 'I’ve opened it — check again');
+    assert.equal(await dialog(app).getByRole('link', { name: /Download Ollama/ }).count(), 1);
+    assert.doesNotMatch(await dialog(app).innerText(), NO_COST_TALK);
+    assert.doesNotMatch(await dialog(app).innerText(), /\bfree\b/i);
+
+    fake.script({ detect: ollama(true, []) });
+    await buttonNamed(app, 'I’ve opened it — check again').click();
+    await buttonNamed(app, 'Download qwen2.5vl (recommended)').waitFor({ timeout: 5000 });
+    await assertOnePrimary(app, 'Download qwen2.5vl (recommended)');
+  });
+});
+
+test('local server: running without a vision model — the recommended download is primary, the others secondary, each in a Terminal window', async (t) => {
+  const fake = createFakeAi({ detect: ollama(true, []) });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openOllama(app);
+    await assertOnePrimary(app, 'Download qwen2.5vl (recommended)');
+    for (const other of ['Download gemma3', 'Download llama3.2-vision']) {
+      assert.ok(await buttonNamed(app, other).evaluate((n) => n.classList.contains('btn-secondary')), other + ' is secondary');
+    }
+    await buttonNamed(app, 'Download gemma3').click();
+    await dialog(app).getByText('A Terminal window opened.').waitFor({ timeout: 5000 });
+    const call = fake.calls.filter((c) => c.name === 'runTerminalAction').pop().arg;
+    assert.deepEqual(call, { ai: 'ollama', action: 'pull', arg: 'gemma3' });
+  });
+});
+
+test('local server: with a model — pick it and Connect, the one primary', async (t) => {
+  const fake = createFakeAi({ detect: ollama(true, ['qwen2.5vl:latest', 'gemma3:latest']) });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openOllama(app);
+    await assertOnePrimary(app, 'Connect');
+    await dialog(app).getByLabel('Model').selectOption('gemma3:latest');
+    await buttonNamed(app, 'Connect').click();
+    await dialog(app).getByText(/^Connected/).first().waitFor({ timeout: 5000 });
+    const call = fake.calls.filter((c) => c.name === 'connect').pop().arg;
+    assert.deepEqual(call, { ai: 'ollama', mode: 'api', api: { provider: 'ollama', model: 'gemma3:latest' } });
+  });
+});
+
+test('local server: a model that cannot see images fails in the step, with Try again', async (t) => {
+  const fake = createFakeAi({
+    detect: ollama(true, ['llama3:latest']),
+    connect: { ok: false, message: 'llama3:latest answered "blue" to a solid red image — it may not support images, and analysing needs vision.' },
+  });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openOllama(app);
+    await buttonNamed(app, 'Connect').click();
+    await dialog(app).locator('.notice.is-error').first().waitFor({ timeout: 5000 });
+    assert.match(await dialog(app).locator('.notice.is-error').first().innerText(), /may not support images/);
+    await assertOnePrimary(app, 'Try again');
+  });
+});
+
+async function openOther(app) {
+  await openWindow(app);
+  await app.page.locator('.cp-list .cp-row', { hasText: 'Something else' }).click();
+  await waitForPane(app, 'Something else');
+}
+
+test('Something else: tabs for Agent command and OpenAI-compatible server, each with one primary Connect that uses the existing paths', async (t) => {
+  const fake = createFakeAi({ detect: claudeKeyOnly() });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openOther(app);
+    assert.equal(await dialog(app).getByRole('tab', { name: 'Agent command' }).getAttribute('aria-selected'), 'true');
+    await assertOnePrimary(app, 'Connect');
+    await dialog(app).getByLabel('Agent command').fill('my-agent --headless -p');
+    await buttonNamed(app, 'Connect').click();
+    await dialog(app).getByText(/^Connected/).first().waitFor({ timeout: 5000 });
+    assert.deepEqual(fake.calls.filter((c) => c.name === 'connect').pop().arg, {
+      ai: 'other', mode: 'agent', agent: { preset: 'custom', command: 'my-agent --headless -p' },
+    });
+  });
+
+  const second = createFakeAi({ detect: claudeKeyOnly() });
+  await withApp(t, { ai: second }, async (app) => {
+    await openOther(app);
+    await dialog(app).getByRole('tab', { name: 'OpenAI-compatible server' }).click();
+    await assertOnePrimary(app, 'Connect');
+    await dialog(app).getByLabel('Base URL').fill('http://localhost:8000/v1');
+    await dialog(app).getByLabel('Model', { exact: true }).fill('my-model');
+    await buttonNamed(app, 'Connect').click();
+    await dialog(app).getByText(/^Connected/).first().waitFor({ timeout: 5000 });
+    assert.deepEqual(second.calls.filter((c) => c.name === 'connect').pop().arg, {
+      ai: 'other', mode: 'api', api: { provider: 'custom', baseUrl: 'http://localhost:8000/v1', apiKey: '', model: 'my-model' },
+    });
+  });
+});
+
+test('Something else: a failed connect keeps what was typed and the button becomes Try again', async (t) => {
+  const fake = createFakeAi({ detect: claudeKeyOnly(), connect: { ok: false, message: '"my-agent" is not on PATH.' } });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openOther(app);
+    await dialog(app).getByLabel('Agent command').fill('my-agent -p');
+    await buttonNamed(app, 'Connect').click();
+    await dialog(app).locator('.notice.is-error').first().waitFor({ timeout: 5000 });
+    assert.match(await dialog(app).locator('.notice.is-error').first().innerText(), /not on PATH/);
+    await assertOnePrimary(app, 'Try again');
+    assert.equal(await dialog(app).getByLabel('Agent command').inputValue(), 'my-agent -p');
+  });
+});
+
+test('API key: editing the key after a failure clears the failure; a network failure says so rather than blaming the key', async (t) => {
+  const fake = createFakeAi({
+    detect: claudeKeyOnly(),
+    models: () => { throw new Error('could not reach https://api.anthropic.com: getaddrinfo ENOTFOUND'); },
+  });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openKeyTab(app);
+    await keyField(app).fill('sk-test-123');
+    await buttonNamed(app, 'Check key').click();
+    const notice = dialog(app).locator('.notice.is-error').first();
+    await notice.waitFor({ timeout: 5000 });
+    assert.match(await notice.innerText(), /Couldn.t reach/);
+    assert.doesNotMatch(await notice.innerText(), /key didn.t work/);
+
+    await keyField(app).focus();
+    await app.page.keyboard.press('End');
+    await app.page.keyboard.type('4');
+    assert.equal(await dialog(app).locator('.notice.is-error').count(), 0, 'the old failure is gone');
+    await assertOnePrimary(app, 'Check key');
+    assert.equal(await keyField(app).inputValue(), 'sk-test-1234', 'typing carries on after the rebuild');
+  });
+});
+
+test('Something else: an answer about money is replaced with plain advice', async (t) => {
+  const fake = createFakeAi({ detect: claudeKeyOnly(), connect: { ok: false, message: 'HTTP 429: insufficient_quota — add billing to your account.' } });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openOther(app);
+    await dialog(app).getByRole('tab', { name: 'OpenAI-compatible server' }).click();
+    await dialog(app).getByLabel('Base URL').fill('http://localhost:8000/v1');
+    await buttonNamed(app, 'Connect').click();
+    await dialog(app).locator('.notice.is-error').first().waitFor({ timeout: 5000 });
+    assert.doesNotMatch(await dialog(app).innerText(), NO_COST_TALK);
+    assert.doesNotMatch(await dialog(app).innerText(), /quota/i);
+    await assertOnePrimary(app, 'Try again');
+  });
+});

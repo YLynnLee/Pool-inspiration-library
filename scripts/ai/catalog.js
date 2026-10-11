@@ -123,7 +123,7 @@ var CATALOG = [
   {
     id: 'ollama',
     name: 'Ollama',
-    blurb: 'Run a model on this computer — free and private.',
+    blurb: 'Run a model on this computer — private, and nothing leaves it.',
     methods: [{
       id: 'local',
       label: 'Ollama',
