@@ -233,4 +233,4 @@ async function runDrain(config, options) {
   return apiDrain.runApiDrain(Object.assign({ api: config.api }, options));
 }
 
-module.exports = { testConnection: testConnection, runDrain: runDrain, detect: detect, models: models, connect: connect, disconnect: disconnect, runTerminalAction: runTerminalAction, refreshPath: refreshPath, extractAgentModel: extractAgentModel, parseModelList: parseModelList };
+module.exports = { loadConfig: configModule.loadConfig, testConnection: testConnection, runDrain: runDrain, detect: detect, models: models, connect: connect, disconnect: disconnect, runTerminalAction: runTerminalAction, refreshPath: refreshPath, extractAgentModel: extractAgentModel, parseModelList: parseModelList };
