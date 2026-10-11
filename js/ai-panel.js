@@ -184,7 +184,10 @@
   var win = null; // { overlay, modal, list, pane, filter, phase, timer }
   // tried: the last failed connect per AI ({ message, loggedOut }), so the
   // notice and "Try again" survive the pane being rebuilt.
-  var ui = { selected: null, query: '', method: {}, otherKind: 'agent', tried: {} };
+  // keyDraft: an API key being entered, per AI, and what came of checking it.
+  // It lives only in memory and is dropped when the window closes.
+  // localModel: the model picked per local server, kept across rebuilds.
+  var ui = { selected: null, query: '', method: {}, otherKind: 'agent', tried: {}, keyDraft: {}, localModel: {} };
   var paneSeq = 0; // changes whenever the pane is rebuilt, so late callbacks can tell
 
   function helperUp() {
@@ -332,6 +335,7 @@
     openingSeq++;
     if (!win) return;
     window.clearInterval(win.timer);
+    ui.keyDraft = {};
     win.overlay.remove();
     win = null;
     document.removeEventListener('keydown', onKey);
@@ -565,6 +569,7 @@
         monogram(OTHER, 'lg'),
         el('div', { class: 'cp-ai-head-text' }, [el('h3', { class: 'cp-pane-title', text: OTHER.name }), el('p', { class: 'ai-hint', text: OTHER.blurb })]),
       ]));
+      if (isConnectedTo('other')) return connectedInto(pane);
       return otherInto(pane);
     }
     var ai = findAi(ui.selected);
@@ -644,18 +649,7 @@
     return el('a', { class: 'ext-link', href: href, target: '_blank', rel: 'noopener' }, [label, icon('external')]);
   }
 
-  // A numbered step: its title, whether it's already done, and its content.
-  function step(number, title, done, children) {
-    var li = el('li', { class: 'ai-step' }, [
-      el('span', { class: 'ai-step-mark', 'aria-hidden': 'true', text: String(number) }),
-      el('div', { class: 'ai-step-body' }, [el('p', { class: 'ai-step-title', text: title })].concat(children || [])),
-    ]);
-    if (done) markStepDone(li);
-    return li;
-  }
-
-  // Ticks a step off in place — when a login window opens or a connection
-  // passes, without re-rendering the guide.
+  // Ticks a step off: its mark becomes a check.
   function tickStep(li) {
     li.classList.add('is-done');
     var mark = li.querySelector('.ai-step-mark');
@@ -663,18 +657,12 @@
     mark.appendChild(icon('check'));
   }
 
-  function markStepDone(li) {
-    if (li.classList.contains('is-done')) return;
-    tickStep(li);
-    li.querySelector('.ai-step-title').textContent += ' — done';
-  }
-
   // The step renderer: the one place the one-primary-button rule is applied.
-  // The subscription flow goes through it; the key and local flows move onto it
-  // in their own ticket.
+  // The subscription, API key and local server flows all go through it.
   //
   // A step is { title, done, alsoOpen, handedOff, body: [nodes], actions: [{
-  // label, run, disabled }] }. The current step is the first unfinished one you
+  // label, run, disabled, mount }] }; `mount(button)` hands back the built
+  // button, for a step that enables or disables it as the collector types. The current step is the first unfinished one you
   // can act on (a step that's only a link, like "get a key", has no actions and
   // doesn't hold the primary button back). Its first action is primary; every
   // other visible action is secondary. A finished step collapses to a ticked
@@ -698,6 +686,7 @@
             text: a.label,
           });
           if (a.disabled) button.disabled = true;
+          if (a.mount) a.mount(button);
           button.addEventListener('click', function () { a.run(button); });
           return button;
         });
@@ -754,26 +743,21 @@
     }
     if (connectedHere && methodModeIs(method, cached.config.mode)) return connectedInto(pane);
 
-    // The agent flow describes its steps as data for the renderer; the key
-    // and local flows still build their own list.
-    if (method.id === 'agent') {
-      pane.appendChild(stepList(agentSteps(ai, method)));
-      // A failed connect's notice is brought into view, not left below the fold.
-      var failure = pane.querySelector('.notice.is-error');
-      if (failure) window.requestAnimationFrame(function () { failure.scrollIntoView({ block: 'nearest' }); });
-      return;
-    }
-    var steps = method.id === 'key' ? keySteps(ai, method) : localSteps(ai, method);
-    pane.appendChild(el('ol', { class: 'ai-steps-list cp-steps' }, steps));
+    var steps = method.id === 'agent' ? agentSteps(ai, method) : method.id === 'key' ? keySteps(ai, method) : localSteps(ai, method);
+    pane.appendChild(stepList(steps));
+    // A failed connect's notice is brought into view, not left below the fold.
+    var failure = pane.querySelector('.notice.is-error');
+    if (failure) window.requestAnimationFrame(function () { failure.scrollIntoView({ block: 'nearest' }); });
   }
 
-  // Runs one connection test, ticking `doneStep` and moving on to the
-  // connection when it passes.
+  // Runs one connection test and, when it passes, moves the pane on to the
+  // connection.
   // options: { app } names the agent app in "Checking {app} answers…";
+  // { triedKey } is the ui.tried entry a pass clears;
   // { onFail(err) } takes over showing a failure (err.result is the helper's
   // answer, so it can tell a lost login from anything else).
   var busy = false;
-  function connectWith(update, status, button, doneStep, options) {
+  function connectWith(update, status, button, options) {
     options = options || {};
     if (busy) return;
     busy = true;
@@ -787,25 +771,15 @@
         failed.result = r;
         throw failed;
       }
-      if (update.mode === 'agent' && update.agent && update.ai) {
-        delete ui.tried[update.ai];
-        rememberSignedIn(update.agent.preset, 'yes');
-      }
+      if (options.triedKey) delete ui.tried[options.triedKey];
+      if (update.mode === 'agent' && update.agent && update.ai) rememberSignedIn(update.agent.preset, 'yes');
+      if (update.api) delete ui.keyDraft[update.ai];
       renderList();
-      if (doneStep) {
-        markStepDone(doneStep);
-        setStatus(status, 'success', r.message);
-        var shown = paneSeq;
-        window.setTimeout(function () {
-          if (shown === paneSeq) renderPane();
-        }, 1200);
-      } else {
-        renderPane();
-      }
+      renderPane();
     }).catch(function (err) {
       if (err.helperDown) return;
       if (options.onFail) options.onFail(err);
-      else setStatus(status, 'error', 'Couldn’t connect', err.message);
+      else setStatus(status, 'error', 'Couldn’t connect', plainFailure(err.message));
     }).then(function () {
       busy = false;
       button.disabled = false;
@@ -817,19 +791,6 @@
   function rememberSignedIn(preset, state) {
     var a = found && found.agents.find(function (x) { return x.id === preset; });
     if (a) a.signedIn = state;
-  }
-
-  function terminalButton(label, body, status, after) {
-    var button = el('button', { class: 'btn btn-secondary', type: 'button', text: label });
-    var run = terminalRun(body, status, after);
-    button.addEventListener('click', function () { run(button); });
-    return button;
-  }
-
-  function checkAgainButton() {
-    var button = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Check again' });
-    button.addEventListener('click', function () { checkAgainRun(button); });
-    return button;
   }
 
   // Install → log in → connect, for an AI that runs through its own app.
@@ -895,8 +856,9 @@
           label: tried ? 'Try again' : 'Connect',
           disabled: !installed,
           run: function (button) {
-            connectWith({ ai: ai.id, mode: 'agent', agent: { preset: m.preset } }, connectStatus, button, null, {
+            connectWith({ ai: ai.id, mode: 'agent', agent: { preset: m.preset } }, connectStatus, button, {
               app: m.app,
+              triedKey: ai.id,
               onFail: function (err) {
                 var lost = !!(err.result && err.result.loggedOut);
                 ui.tried[ai.id] = { message: err.message, loggedOut: lost };
@@ -915,7 +877,7 @@
     if (tried) {
       setStatus(connectStatus, 'error',
         tried.loggedOut ? m.app + ' isn’t logged in' : 'Couldn’t connect',
-        tried.loggedOut ? 'Use “Open ' + m.app + ' to log in” above, then press Try again.' : tried.message + ' Press Try again.');
+        tried.loggedOut ? 'Use “Open ' + m.app + ' to log in” above, then press Try again.' : plainFailure(tried.message) + ' Press Try again.');
     }
     return steps;
   }
@@ -946,92 +908,209 @@
 
   // Where a pasted key ends up, said plainly — see scripts/ai/secrets.js.
   function keyPromise() {
-    return 'Kept in ' + (cached.keyStore || 'a private store on this computer') + ' — never in the library folder, never in the browser, and only ever sent to this provider over https.';
+    return 'Kept in ' + (cached.keyStore || 'a private store on this computer') + ', never in the library folder or the browser.';
   }
 
+  // The key being entered for an AI, and what came of checking it:
+  // { value, models: [ids] | null, model, failed: { title, text } | null }.
+  function keyDraftFor(aiId) {
+    if (!ui.keyDraft[aiId]) ui.keyDraft[aiId] = { value: '', models: null, model: '', failed: null };
+    return ui.keyDraft[aiId];
+  }
+
+  // A provider or an app may answer a failure in terms of money. Pool's
+  // window never talks about cost, so such an answer is replaced by plain
+  // advice; everything else is shown as it came.
+  var COST_TALK = /quota|billing|credit|balance|\bpay|\bcost|\bprice|pricing|\bcharge|\bplan limit/i;
+
+  function plainFailure(message) {
+    return COST_TALK.test(String(message || '')) ? 'It didn’t answer. Check the details above, then try again.' : message;
+  }
+
+  // What a failed key check or connect says. A key the provider turned down
+  // (or any answer that is about the account) is "That key didn't work" with
+  // the one fix the collector has; the provider's own wording is never shown.
+  // Not being able to reach the provider, and a model that can't see images,
+  // say so instead.
+  function keyFailure(providerName, message) {
+    if (/\bsee images\b|support images/i.test(message)) return { title: 'Couldn’t connect', text: plainFailure(message) + ' Choose another model, then press Try again.' };
+    if (/could not reach|ECONN|ENOTFOUND|timed? ?out|Lost contact/i.test(message)) {
+      return { title: 'Couldn’t reach ' + providerName, text: 'Check your internet connection, then press Try again.' };
+    }
+    return {
+      title: 'That key didn’t work',
+      text: 'Check that you copied all of it from your ' + providerName + ' account, then paste it again and press Try again.',
+    };
+  }
+
+  // Both steps are open from the start: someone with a key ready pastes it
+  // without touching step 1. Check key is the primary until the key lists
+  // models; then it's Connect.
   function keySteps(ai, m) {
     var provider = cached.presets.providers.find(function (p) { return p.id === m.provider; });
+    var providerName = provider.label.replace(/ \(.*\)$/, '');
+    var saved = hasEnvKey(m.provider);
+    var draft = keyDraftFor(ai.id);
     var status = statusSlot();
-    var key = el('input', { class: 'add-modal-input ai-mono', type: 'password', autocomplete: 'off', 'aria-label': 'API key', placeholder: hasEnvKey(m.provider) ? 'Found $' + provider.keyEnv + ' — leave empty to use it' : 'Paste your API key' });
-    var next = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Continue' });
-    var chooser = el('div', { class: 'ai-row', hidden: 'hidden' });
-    var connectStep;
-    next.addEventListener('click', function () {
-      next.disabled = true;
-      setStatus(status, 'info', 'Checking the key…');
-      api('POST', '/api/models', { mode: 'api', api: { provider: m.provider, apiKey: key.value } }).then(function (r) {
-        setStatus(status, null);
-        if (!r.models.length) throw new Error('No models were listed for this key.');
-        chooser.textContent = '';
-        var select = el('select', { class: 'add-modal-input', 'aria-label': 'Model' }, r.models.map(function (id) {
-          return el('option', { value: id, text: id });
-        }));
-        select.value = r.suggested || r.models[0];
-        var connectBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
-        connectBtn.addEventListener('click', function () {
-          connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, apiKey: key.value, model: select.value } }, status, connectBtn, connectStep);
-        });
-        chooser.appendChild(select);
-        chooser.appendChild(connectBtn);
-        chooser.hidden = false;
-      }).catch(function (err) {
-        if (err.helperDown) return;
-        setStatus(status, 'error', 'Couldn’t check the key', err.message);
-      }).then(function () { next.disabled = false; });
+    var checkButton = null;
+    var key = el('input', {
+      class: 'add-modal-input ai-mono',
+      type: 'password',
+      autocomplete: 'off',
+      'aria-label': 'API key',
+      placeholder: saved ? 'Found $' + provider.keyEnv + ' — leave empty to use it' : 'Paste your API key',
     });
+    // As a property, not an attribute: an attribute would put the key in the
+    // page's markup.
+    key.value = draft.value;
+    key.addEventListener('input', function () {
+      draft.value = key.value;
+      if (draft.models || draft.failed) {
+        // The models were listed for the old key, and a failure was about it.
+        draft.models = null;
+        draft.failed = null;
+        renderPane();
+        var again = win && win.pane.querySelector('input[aria-label="API key"]');
+        if (again) {
+          again.focus();
+          again.setSelectionRange(again.value.length, again.value.length);
+        }
+      } else if (checkButton) {
+        checkButton.disabled = !saved && !draft.value.trim();
+      }
+    });
+
+    function fail(err) {
+      if (err.helperDown) return;
+      draft.failed = keyFailure(providerName, err.message);
+      renderPane();
+    }
+
+    function checkKey(button) {
+      button.disabled = true;
+      setStatus(status, 'info', 'Checking the key…');
+      api('POST', '/api/models', { mode: 'api', api: { provider: m.provider, apiKey: draft.value } }).then(function (r) {
+        if (!r.models.length) {
+          draft.failed = { title: 'No models to choose from', text: 'This key lists no models. Check that it’s for ' + providerName + '’s API, then press Try again.' };
+          return renderPane();
+        }
+        draft.models = r.models;
+        draft.model = r.suggested || r.models[0];
+        draft.failed = null;
+        renderPane();
+      }).catch(function (err) {
+        fail(err);
+        button.disabled = false;
+      });
+    }
+
+    var body = [el('div', { class: 'ai-row' }, [key])];
+    var actions;
+    if (draft.models) {
+      var select = el('select', { class: 'add-modal-input', 'aria-label': 'Model' }, draft.models.map(function (id) {
+        return el('option', { value: id, text: id });
+      }));
+      select.value = draft.model;
+      select.addEventListener('change', function () { draft.model = select.value; });
+      body.push(el('div', { class: 'ai-row' }, [select]));
+      actions = [{
+        label: draft.failed ? 'Try again' : 'Connect',
+        run: function (button) {
+          connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, apiKey: draft.value, model: draft.model } }, status, button, {
+            onFail: fail,
+          });
+        },
+      }];
+    } else {
+      actions = [{
+        label: draft.failed ? 'Try again' : 'Check key',
+        disabled: !saved && !draft.value.trim(),
+        mount: function (button) { checkButton = button; },
+        run: checkKey,
+      }];
+    }
+    body.push(hint(keyPromise()));
+    if (draft.failed) setStatus(status, 'error', draft.failed.title, draft.failed.text);
+
     return [
-      step(1, 'Get an API key', hasEnvKey(m.provider), [
-        el('p', { class: 'ai-hint' }, [
-          document.createTextNode('Create one in your ' + provider.label.replace(/ \(.*\)$/, '') + ' account. '),
-          extLink(m.keyUrl, 'Get a key'),
-        ]),
-      ]),
-      connectStep = step(2, 'Paste it and pick a model', isConnectedTo(ai.id, 'api'), [
-        el('div', { class: 'ai-row' }, [key, next]),
-        chooser,
-        status,
-        hint(keyPromise()),
-      ]),
+      {
+        title: saved ? 'You have an API key' : 'Get an API key',
+        done: saved,
+        alsoOpen: true,
+        body: [el('p', { class: 'ai-hint' }, [extLink(m.keyUrl, 'Get a key'), document.createTextNode(' — already have one? Paste it below.')])],
+      },
+      { title: 'Paste it and pick a model', body: body, actions: actions, slot: status },
     ];
   }
 
+  // Download and open the app → get a model that can see images → connect.
   function localSteps(ai, m) {
     var server = localServer(m.provider);
     var running = !!(server && server.running);
     var models = running ? server.models : [];
-    var status = statusSlot();
-    var pullStatus = statusSlot();
+    var tried = ui.tried[ai.id + ':local'];
+    var downloadStatus = statusSlot();
+    var connectStatus = statusSlot();
+    var checkAgain = function (label) { return { label: label, run: checkAgainRun }; };
+
+    var modelActions = [];
+    var modelBody;
+    if (!running) {
+      modelBody = [hint('Do step 1 first.')];
+    } else if (m.pull.length) {
+      modelBody = [hint('The library needs a model that can see images. Download one (a few GB):')];
+      modelActions = m.pull.map(function (name, i) {
+        return { label: 'Download ' + name + (i === 0 ? ' (recommended)' : ''), run: terminalRun({ ai: ai.id, action: 'pull', arg: name }, downloadStatus) };
+      }).concat([checkAgain('Check again')]);
+    } else {
+      modelBody = [hint(m.startHint)];
+      modelActions = [checkAgain('Check again')];
+    }
+
+    var chosen = ui.localModel[ai.id];
     var select = el('select', { class: 'add-modal-input', 'aria-label': 'Model' }, models.map(function (id) {
       return el('option', { value: id, text: id });
     }));
-    if (server && server.suggested) select.value = server.suggested;
-    var connectStep;
-    var connectBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
-    connectBtn.addEventListener('click', function () {
-      connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, model: select.value } }, status, connectBtn, connectStep);
-    });
-    if (!models.length) connectBtn.disabled = true;
+    if (models.indexOf(chosen) !== -1) select.value = chosen;
+    else if (server && server.suggested) select.value = server.suggested;
+    select.addEventListener('change', function () { ui.localModel[ai.id] = select.value; });
 
-    var modelStepBody = !running ? [hint('Do step 1 first.')]
-      : m.pull.length ? [
-        hint('The library needs a model that can see images. Download one (a few GB):'),
-        el('div', { class: 'ai-row' }, m.pull.map(function (name) {
-          return terminalButton(name, { ai: ai.id, action: 'pull', arg: name }, pullStatus);
-        }).concat([checkAgainButton()])),
-        pullStatus,
-      ]
-      : [hint(m.startHint), el('div', { class: 'ai-row' }, [checkAgainButton()])];
+    if (tried) setStatus(connectStatus, 'error', 'Couldn’t connect', plainFailure(tried.message) + ' Press Try again.');
 
     return [
-      step(1, 'Install and open ' + m.label, running, running ? [] : [
-        el('p', { class: 'ai-hint' }, [
+      {
+        title: running ? m.label + ' is running' : 'Install and open ' + m.label,
+        done: running,
+        body: running ? [] : [el('p', { class: 'ai-hint' }, [
           extLink(m.download, 'Download ' + m.label),
           document.createTextNode(' — ' + (m.pull.length ? m.startHint : 'then open it.')),
-        ]),
-        el('div', { class: 'ai-row' }, [checkAgainButton()]),
-      ]),
-      step(2, 'Get a model that can see images', running && models.length > 0, modelStepBody),
-      connectStep = step(3, 'Choose it and connect', running && isConnectedTo(ai.id, 'api'), models.length ? [el('div', { class: 'ai-row' }, [select, connectBtn]), status] : [hint('Your downloaded models will appear here.')]),
+        ])],
+        actions: running ? [] : [checkAgain('I’ve opened it — check again')],
+      },
+      {
+        title: running && models.length ? 'You have a model that can see images' : 'Get a model that can see images',
+        done: running && models.length > 0,
+        body: modelBody,
+        actions: modelActions,
+        slot: downloadStatus,
+      },
+      {
+        title: 'Choose it and connect',
+        body: models.length ? [el('div', { class: 'ai-row' }, [select])] : [hint('Your downloaded models will appear here.')],
+        actions: models.length ? [{
+          label: tried ? 'Try again' : 'Connect',
+          run: function (button) {
+            connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, model: select.value } }, connectStatus, button, {
+              triedKey: ai.id + ':local',
+              onFail: function (err) {
+                ui.tried[ai.id + ':local'] = { message: err.message };
+                renderPane();
+              },
+            });
+          },
+        }] : [],
+        slot: connectStatus,
+      },
     ];
   }
 
@@ -1134,7 +1213,7 @@
       // name still works.
       typed.hidden = false;
       typed.value = current;
-      window.UI.setNotice(status, 'warning', { title: 'Couldn’t list models', text: err.message + ' Type a model name instead.' });
+      window.UI.setNotice(status, 'warning', { title: 'Couldn’t list models', text: plainFailure(err.message) + ' Type a model name instead.' });
       changed();
     });
 
@@ -1147,7 +1226,7 @@
         renderPane();
       }).catch(function (err) {
         if (err.helperDown) return;
-        setStatus(status, 'error', 'Couldn’t switch model', err.message + ' Still using the previous model.');
+        setStatus(status, 'error', 'Couldn’t switch model', plainFailure(err.message) + ' Still using the previous model.');
         save.disabled = false;
       });
     });
@@ -1169,13 +1248,14 @@
   // ---- something else: any agent command, or an OpenAI-compatible server ------------------
 
   function otherInto(pane) {
-    pane.appendChild(el('div', { class: 'ai-segment', role: 'group', 'aria-label': 'Kind' }, [
+    pane.appendChild(el('div', { class: 'ai-segment', role: 'tablist', 'aria-label': 'Kind' }, [
       ['agent', 'Agent command'], ['server', 'OpenAI-compatible server'],
     ].map(function (k) {
       return el('button', {
         class: 'ai-segment-btn',
         type: 'button',
-        'aria-pressed': String(ui.otherKind === k[0]),
+        role: 'tab',
+        'aria-selected': String(ui.otherKind === k[0]),
         text: k[1],
         onclick: function () { ui.otherKind = k[0]; renderPane(); },
       });
@@ -1183,10 +1263,19 @@
     var status = statusSlot();
     var button = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
     var form = el('div', { class: 'cp-other' });
+    // A failure is shown in place rather than by rebuilding the form, so what
+    // was typed stays; the button becomes Try again.
+    var options = {
+      onFail: function (err) {
+        setStatus(status, 'error', 'Couldn’t connect', plainFailure(err.message));
+        button.textContent = 'Try again';
+        status.scrollIntoView({ block: 'nearest' });
+      },
+    };
     if (ui.otherKind === 'agent') {
       var cmd = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Agent command', placeholder: 'e.g. my-agent --headless -p' });
       button.addEventListener('click', function () {
-        connectWith({ ai: 'other', mode: 'agent', agent: { preset: 'custom', command: cmd.value } }, status, button);
+        connectWith({ ai: 'other', mode: 'agent', agent: { preset: 'custom', command: cmd.value } }, status, button, options);
       });
       form.appendChild(el('label', { class: 'add-modal-label', text: 'Command' }));
       form.appendChild(cmd);
@@ -1196,7 +1285,7 @@
       var model = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Model', placeholder: 'Model name' });
       var key = el('input', { class: 'add-modal-input ai-mono', type: 'password', autocomplete: 'off', 'aria-label': 'API key', placeholder: 'Only if the server needs one' });
       button.addEventListener('click', function () {
-        connectWith({ ai: 'other', mode: 'api', api: { provider: 'custom', baseUrl: base.value, apiKey: key.value, model: model.value } }, status, button);
+        connectWith({ ai: 'other', mode: 'api', api: { provider: 'custom', baseUrl: base.value, apiKey: key.value, model: model.value } }, status, button, options);
       });
       form.appendChild(el('label', { class: 'add-modal-label', text: 'Server address' }));
       form.appendChild(base);
