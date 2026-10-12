@@ -43,7 +43,7 @@
   }
 
   window.buildInboxButton = function () {
-    var button = el('button', { class: 'btn btn-ghost inbox-btn', type: 'button', onclick: function () { openInbox(); } });
+    var button = el('button', { class: 'btn btn-secondary inbox-btn', type: 'button', onclick: function () { openInbox(); } });
     fillButton(button);
     return button;
   };
@@ -405,7 +405,7 @@
       d.footer.appendChild(el('button', { class: 'btn btn-primary btn-block', type: 'button', text: 'Connect AI', onclick: AI.openConnect }));
     } else if (kind === 'offline') {
       d.footer.appendChild(el('p', { class: 'drawer-footer-text', text: 'Can’t reach the library helper. Is its window still open?' }));
-      d.footer.appendChild(el('button', { class: 'btn btn-ghost btn-block', type: 'button', text: 'Try again', onclick: AI.refresh }));
+      d.footer.appendChild(el('button', { class: 'btn btn-secondary btn-block', type: 'button', text: 'Try again', onclick: AI.refresh }));
     } else if (kind === 'no-ai') {
       d.footer.appendChild(el('p', { class: 'drawer-footer-text', text: status.inbox.captures ? 'Connect an AI to analyse these and add them to your library.' : 'Connect an AI so these can be analysed when you drain.' }));
       d.footer.appendChild(el('button', { class: 'btn btn-primary btn-block', type: 'button', text: 'Connect AI', onclick: AI.openConnect }));
@@ -431,7 +431,7 @@
       var bar = el('div', { class: 'progress' }, [el('div', { class: 'progress-bar' })]);
       var title = el('p', { class: 'drain-title' });
       var line = el('p', { class: 'drain-line' });
-      var stop = el('button', { class: 'btn btn-ghost btn-sm', type: 'button' }, [icon('stop'), 'Stop']);
+      var stop = el('button', { class: 'btn btn-secondary btn-sm', type: 'button' }, [icon('stop'), 'Stop']);
       stop.addEventListener('click', function () {
         stop.disabled = true;
         stop.lastChild.textContent = 'Stopping…';
@@ -457,7 +457,7 @@
       d.footer.appendChild(buildLog());
       d.footer.appendChild(el('div', { class: 'drawer-footer-actions' }, [
         el('button', {
-          class: 'btn btn-ghost',
+          class: 'btn btn-secondary',
           type: 'button',
           text: 'Dismiss',
           onclick: function () {

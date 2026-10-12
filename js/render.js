@@ -270,6 +270,10 @@
     if (isGridMounted()) updateGrid(gridView.filters);
   }
 
+  // The Add drawer calls this after a run adds references, so the grid shows
+  // them without a reload.
+  window.refreshLibraryView = refreshGrid;
+
   function renderGrid(filters) {
     var root = el('div', { class: 'view view-grid' });
     var search = buildSearch();
@@ -283,7 +287,7 @@
         el('h1', { class: 'library-title', text: 'Pool' }),
         el('div', { class: 'library-actions' }, [
           window.buildAiHeader ? window.buildAiHeader() : null,
-          window.buildInboxButton ? window.buildInboxButton() : null,
+          window.buildAddButton ? window.buildAddButton() : null,
         ]),
       ]),
       el('div', { class: 'filter-bar' }, [search.wrap, segments]),
@@ -590,7 +594,7 @@
       title = filters.query ? 'Nothing matches “' + filters.query + '”.' : 'Nothing matches these filters.';
       hint = 'Try fewer words, or remove a filter above.';
       action = el('button', {
-        class: 'btn btn-ghost',
+        class: 'btn btn-secondary',
         type: 'button',
         text: 'Clear filters',
         onclick: function () { setFilters(Object.assign({}, NO_FILTERS, { show: filters.show }), true); },
@@ -598,14 +602,14 @@
     } else if (filters.show === 'drafts') {
       title = 'No drafts.';
       hint = 'Every capture came through cleanly.';
-      action = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Back to all', onclick: function () { setFilters(NO_FILTERS, true); } });
+      action = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Back to all', onclick: function () { setFilters(NO_FILTERS, true); } });
     } else if (filters.show === 'hidden') {
       title = 'Nothing hidden.';
-      action = el('button', { class: 'btn btn-ghost', type: 'button', text: 'Back to all', onclick: function () { setFilters(NO_FILTERS, true); } });
+      action = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Back to all', onclick: function () { setFilters(NO_FILTERS, true); } });
     } else if (!libraryTotal) {
       title = 'Your library is empty.';
-      hint = 'Paste a link anywhere on this page to add it to the inbox, then drain it.';
-      action = el('button', { class: 'btn btn-primary', type: 'button', text: 'Open inbox', onclick: function () { if (window.openInbox) window.openInbox(); } });
+      hint = 'Paste a link anywhere on this page to add your first reference.';
+      action = el('button', { class: 'btn btn-primary', type: 'button', text: 'Add reference', onclick: function () { if (window.openInbox) window.openInbox(); } });
     } else {
       title = 'No references to show.';
     }
@@ -702,14 +706,74 @@
   }
 
   // ---- detail view -----------------------------------------------------
+  //
+  // Top to bottom: the screenshots, then a caption (the name, its category
+  // and what you can do with the reference), then the summary and keywords
+  // under the same section labels the tabs use. Nothing on this page
+  // navigates away except the back link and Visit site — categories and
+  // keywords are read here and filtered on the library.
+
+  function hostOf(url) {
+    try {
+      return new URL(url).host.replace(/^www\./, '');
+    } catch (err) {
+      return '';
+    }
+  }
+
+  function buildDetailShots(entry) {
+    var wrap = el('div', { class: 'entry-shots' });
+    var shots = entry.screenshots || [];
+    if (!shots.length) return wrap;
+    var hero = el('img', { class: 'hero-image', src: shots[0], alt: entry.name });
+    hero.addEventListener('click', function () {
+      openLightbox(shots[0], entry.name);
+    });
+    wrap.appendChild(el('div', { class: 'hero-wrap' }, [hero]));
+    if (shots.length > 1) {
+      var extra = el('div', { class: 'extra-screenshots' });
+      shots.slice(1).forEach(function (src) {
+        var img = el('img', { class: 'extra-screenshot', src: src, alt: entry.name });
+        img.addEventListener('click', function () {
+          openLightbox(src, entry.name);
+        });
+        extra.appendChild(img);
+      });
+      wrap.appendChild(extra);
+    }
+    return wrap;
+  }
+
+  function buildDetailActions(entry) {
+    var actions = el('div', { class: 'entry-actions' });
+    // http(s) only: a javascript: sourceUrl would run in the helper's trusted origin.
+    if (/^https?:\/\//i.test(entry.sourceUrl || '')) {
+      actions.appendChild(
+        el('a', {
+          class: 'btn btn-secondary btn-sm',
+          href: entry.sourceUrl,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          title: entry.sourceUrl,
+        }, ['Visit site', icon('external')])
+      );
+    }
+    actions.appendChild(
+      el('button', {
+        class: 'btn btn-secondary btn-sm btn-danger-quiet',
+        type: 'button',
+        text: 'Delete…',
+        onclick: function () { openPurgeModal(entry); },
+      })
+    );
+    return actions;
+  }
 
   function renderDetail(id) {
     var entry = window.getEntry(id);
     var root = el('div', { class: 'view view-entry' });
 
-    root.appendChild(
-      el('a', { class: 'back-link', href: '#/', text: '‹ All references' })
-    );
+    root.appendChild(el('a', { class: 'back-link', href: '#/' }, [icon('back'), 'Library']));
 
     if (!entry) {
       root.appendChild(
@@ -726,86 +790,56 @@
 
     if (window.isDraft(entry)) {
       root.appendChild(
-        el('div', { class: 'detail-draft-notice' }, [
-          el('span', { class: 'draft-badge', text: 'Draft' }),
-          entry.draftReason ? el('span', { class: 'draft-reason', text: entry.draftReason }) : null,
+        el('div', { class: 'entry-draft' }, [
+          UI.notice('warning', 'Draft — the screenshot didn’t come through', entry.draftReason, [
+            el('button', {
+              class: 'btn btn-secondary btn-sm',
+              type: 'button',
+              text: 'Resolve…',
+              onclick: function () { openResolveModal(entry); },
+            }),
+          ]),
         ])
       );
     }
 
-    // 1. hero screenshot
-    var heroWrap = el('div', { class: 'hero-wrap' });
-    var hero = el('img', {
-      class: 'hero-image',
-      src: entry.screenshots[0],
-      alt: entry.name,
-    });
-    hero.addEventListener('click', function () {
-      openLightbox(entry.screenshots[0], entry.name);
-    });
-    heroWrap.appendChild(hero);
-    root.appendChild(heroWrap);
+    root.appendChild(buildDetailShots(entry));
 
-    if (entry.screenshots.length > 1) {
-      var extra = el('div', { class: 'extra-screenshots' });
-      entry.screenshots.slice(1).forEach(function (src) {
-        var img = el('img', { class: 'extra-screenshot', src: src, alt: entry.name });
-        img.addEventListener('click', function () {
-          openLightbox(src, entry.name);
-        });
-        extra.appendChild(img);
-      });
-      root.appendChild(extra);
-    }
+    // The caption: name, then the category it belongs to, with the actions
+    // opposite.
+    root.appendChild(
+      el('div', { class: 'entry-caption' }, [
+        el('div', {}, [
+          el('h1', { class: 'entry-title', text: entry.name }),
+          category
+            ? el('p', { class: 'entry-category' }, [
+              el('strong', { text: category.name }),
+              category.definition ? ' — ' + category.definition : '',
+            ])
+            : null,
+        ]),
+        buildDetailActions(entry),
+      ])
+    );
 
-    // 2. name -> sourceUrl
-    var titleRow = el('div', { class: 'entry-title-row' });
-    // http(s) only: a javascript: sourceUrl would run in the helper's trusted origin.
-    if (/^https?:\/\//i.test(entry.sourceUrl || '')) {
-      titleRow.appendChild(
-        el('a', {
-          class: 'entry-name entry-name-link',
-          href: entry.sourceUrl,
-          target: '_blank',
-          rel: 'noopener noreferrer',
-          text: entry.name,
-        })
-      );
-    } else {
-      titleRow.appendChild(el('span', { class: 'entry-name', text: entry.name }));
-    }
-    root.appendChild(titleRow);
-
-    // 3. category badge + one-line definition, expandable to the full essay
-    if (category) {
-      root.appendChild(buildCategorySection(category));
-    }
-
-    // 4. summary
-    root.appendChild(el('p', { class: 'entry-summary', text: entry.summary }));
-
-    // 5. keyword chips
-    var chipRow = el('div', { class: 'chip-row' });
-    (entry.keywords || []).forEach(function (kw) {
-      chipRow.appendChild(
-        el('a', {
-          class: 'chip',
-          href: buildGridHash({ query: '', category: '', keyword: kw }),
-          text: kw,
-        })
-      );
-    });
     root.appendChild(el('section', { class: 'entry-section' }, [
-      el('h2', { class: 'section-label', text: 'Keywords' }),
-      chipRow,
+      el('h2', { class: 'section-label', text: 'Summary' }),
+      el('p', { class: 'entry-summary', text: entry.summary }),
     ]));
 
-    // 6. everything past the header is tabbed: the design
-    // system breakdown, the whole DESIGN.md, and the prompts. A reference
-    // with no design system still gets tabs — Breakdown falls back to the
-    // plain palette + type notes it has always had, and the DESIGN.md tab
-    // is simply absent, since six of eight pilot references have no design
-    // system and that is a valid state indefinitely.
+    if ((entry.keywords || []).length) {
+      root.appendChild(el('section', { class: 'entry-section' }, [
+        el('h2', { class: 'section-label', text: 'Keywords' }),
+        el('ul', { class: 'keyword-list' }, entry.keywords.map(function (kw) {
+          return el('li', { text: kw });
+        })),
+      ]));
+    }
+
+    // Everything past the header is tabbed: the design system breakdown,
+    // the whole DESIGN.md, and the prompts. A reference with no design
+    // system still gets tabs — Breakdown falls back to the plain palette +
+    // type notes, and the DESIGN.md tab is simply absent.
     root.appendChild(buildDetailTabs(entry, window.getDesignSystem(entry.id)));
 
     app.innerHTML = '';
@@ -1009,7 +1043,7 @@
     var filename = ds.referenceId + '-DESIGN.md';
     var actions = el('div', { class: 'design-download-actions' });
 
-    var downloadBtn = el('button', { class: 'copy-btn', type: 'button', text: 'Download .md' });
+    var downloadBtn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: 'Download .md' });
     downloadBtn.addEventListener('click', function () {
       var text = window.serializeDesignMd(ds);
       if ('download' in document.createElement('a')) {
@@ -1033,7 +1067,7 @@
     });
     actions.appendChild(downloadBtn);
 
-    var copyBtn = el('button', { class: 'copy-btn', type: 'button', text: 'Copy .md' });
+    var copyBtn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: 'Copy .md' });
     copyBtn.addEventListener('click', function () {
       copyText(window.serializeDesignMd(ds), function (ok) {
         flashCopied(copyBtn, ok ? 'Copied!' : 'Copy failed');
@@ -1247,21 +1281,6 @@
     ]);
   }
 
-  function buildCategorySection(category) {
-    var wrap = el('div', { class: 'category-section' });
-    var row = el('div', { class: 'category-badge-row' }, [
-      el('a', {
-        class: 'category-badge',
-        href: buildGridHash({ query: '', category: category.id, keyword: '' }),
-        text: category.name,
-      }),
-      el('span', { class: 'category-definition', text: category.definition }),
-    ]);
-    wrap.appendChild(row);
-
-    return wrap;
-  }
-
   // Shared by every entry-section whose h2 sits opposite one action element
   // (a single copy button, or a row of several) — buildPromptBlock below and
   // buildDesignMdPanel in the design-system panels.
@@ -1273,7 +1292,7 @@
   }
 
   function buildPromptBlock(label, text) {
-    var copyBtn = el('button', { class: 'copy-btn', type: 'button', text: 'Copy' });
+    var copyBtn = el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: 'Copy' });
     copyBtn.addEventListener('click', function () {
       copyText(text, function (ok) {
         flashCopied(copyBtn, ok ? 'Copied!' : 'Copy failed');
@@ -1346,7 +1365,7 @@
     });
 
     var cancelBtn = el('button', {
-      class: 'add-modal-cancel',
+      class: 'btn btn-secondary',
       type: 'button',
       text: 'Cancel',
       onclick: closePurgeModal,
@@ -1466,7 +1485,7 @@
       status.classList.toggle('is-error', !!isError);
     }
 
-    var confirmBtn = el('button', { class: 'add-modal-save', type: 'button', text: 'Resolve' });
+    var confirmBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Resolve' });
     confirmBtn.disabled = true;
 
     var list = el('div', { class: 'resolve-modal-list', role: 'radiogroup', 'aria-label': 'Category' });
@@ -1515,7 +1534,7 @@
     });
 
     var cancelBtn = el('button', {
-      class: 'add-modal-cancel',
+      class: 'btn btn-secondary',
       type: 'button',
       text: 'Close',
       onclick: closeResolveModal,

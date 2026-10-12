@@ -34,6 +34,11 @@
     stop: '<rect x="4.5" y="4.5" width="7" height="7" rx="1"/>',
     tag: '<path d="M2.5 8.2V3a.5.5 0 0 1 .5-.5h5.2l5.3 5.3-5.7 5.7z"/><circle cx="5.5" cy="5.5" r=".8"/>',
     folder: '<path d="M2 4.5a1 1 0 0 1 1-1h3.2l1.3 1.5H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/>',
+    alert: '<circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11h.01"/>',
+    info: '<circle cx="8" cy="8" r="6"/><path d="M8 7.5V11M8 5h.01"/>',
+    external: '<path d="M6 3.5H3.5v9h9V10M9 3h4v4M13 3 7.5 8.5"/>',
+    back: '<path d="M10 3.5 5.5 8l4.5 4.5"/>',
+    forward: '<path d="M6 3.5 10.5 8 6 12.5"/>',
   };
 
   function icon(name, extraClass) {
@@ -43,6 +48,19 @@
       (ICON_PATHS[name] || '') +
       '</svg>';
     return span;
+  }
+
+  // ---- notice ----------------------------------------------------------------
+  // tone: info | success | warning | error. See .notice in style.css.
+
+  function notice(tone, title, text, actions) {
+    var glyph = icon(tone === 'success' ? 'check' : tone === 'info' ? 'info' : 'alert');
+    return el('div', { class: 'notice is-' + tone, role: tone === 'error' ? 'alert' : 'status' }, [
+      glyph,
+      el('p', { class: 'notice-title', text: title }),
+      text ? el('p', { class: 'notice-text', text: text }) : null,
+      actions && actions.length ? el('div', { class: 'notice-actions' }, actions) : null,
+    ]);
   }
 
   // ---- toasts ---------------------------------------------------------------
@@ -169,6 +187,7 @@
     el: el,
     icon: icon,
     toast: toast,
+    notice: notice,
     popover: popover,
     closePopover: closePopover,
     closePopoverWithin: closePopoverWithin,

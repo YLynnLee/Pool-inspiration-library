@@ -54,11 +54,12 @@
     });
   }
 
-  // ---- header: the AI pill -------------------------------------------------------
+  // ---- header: the AI button -----------------------------------------------------
   //
-  // Not connected: a quiet "Connect AI" with a hollow dot. Connected: the AI's
-  // name with a lit dot, opening a small menu to switch or disconnect — the
-  // full Connect dialog only opens when there's actually a choice to make.
+  // A secondary button beside the primary "Add reference". Not connected:
+  // "Connect AI" with a hollow dot. Connected: the AI's name with a lit dot,
+  // opening a small menu to switch or disconnect — the full Connect dialog
+  // only opens when there's actually a choice to make.
 
   function fillHeader(slot) {
     window.UI.closePopoverWithin(slot);
@@ -66,15 +67,15 @@
     var connection = cached && cached.config.connection;
     if (!connection) {
       slot.appendChild(el('button', {
-        class: 'ai-pill is-off',
+        class: 'btn btn-secondary ai-btn is-off',
         type: 'button',
-        title: 'Connect the AI you use, so Drain can analyse your inbox',
+        title: 'Connect the AI you use, so it can analyse the links you add',
         onclick: function () { openConnect(); },
       }, [el('span', { class: 'ai-dot', 'aria-hidden': 'true' }), el('span', { text: 'Connect AI' })]));
       return;
     }
     slot.appendChild(el('button', {
-      class: 'ai-pill',
+      class: 'btn btn-secondary ai-btn',
       type: 'button',
       'aria-haspopup': 'dialog',
       'aria-expanded': 'false',
@@ -82,8 +83,8 @@
       onclick: function (evt) { openAiMenu(evt.currentTarget); },
     }, [
       el('span', { class: 'ai-dot', 'aria-hidden': 'true' }),
-      el('span', { class: 'ai-pill-label', text: connection.label }),
-      icon('chevron', 'ai-pill-chevron'),
+      el('span', { class: 'ai-btn-label', text: connection.label.split(' · ')[0] }),
+      icon('chevron', 'ai-btn-chevron'),
     ]));
   }
 
@@ -122,13 +123,13 @@
       var running = drain.running;
       body.appendChild(el('div', { class: 'ai-menu-actions' }, [
         el('button', {
-          class: 'btn btn-ghost btn-sm',
+          class: 'btn btn-secondary btn-sm',
           type: 'button',
           text: 'Switch AI…',
           onclick: function () { window.UI.closePopover(); openConnect(); },
         }),
         el('button', {
-          class: 'btn btn-ghost btn-sm btn-danger-quiet',
+          class: 'btn btn-secondary btn-sm btn-danger-quiet',
           type: 'button',
           text: 'Disconnect',
           disabled: running,
@@ -163,7 +164,7 @@
       body.appendChild(el('p', { class: 'ai-menu-name', text: 'Disconnect ' + connection.label + '?' }));
       body.appendChild(el('p', { class: 'ai-menu-meta', text: 'Drain stops working until you connect an AI again. Nothing in your library or inbox changes, and any saved key stays on this computer.' }));
       body.appendChild(el('div', { class: 'ai-menu-actions' }, [
-        el('button', { class: 'btn btn-ghost btn-sm', type: 'button', text: 'Cancel', onclick: showMain }),
+        el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: 'Cancel', onclick: showMain }),
         confirm,
       ]));
       body.appendChild(status);
@@ -199,7 +200,7 @@
   }
 
   function closeButton(text) {
-    return el('button', { class: 'add-modal-cancel', type: 'button', text: text || 'Close', onclick: closeModal });
+    return el('button', { class: 'btn btn-secondary', type: 'button', text: text || 'Close', onclick: closeModal });
   }
 
   // ---- Connect: opened from file:// --------------------------------------------
@@ -235,7 +236,7 @@
       if (up) return goToHelper();
 
       var status = el('p', { class: 'add-modal-status', 'aria-live': 'polite', text: 'Trying to connect automatically…' });
-      var retry = el('button', { class: 'add-modal-cancel', type: 'button', text: 'Try again', hidden: 'hidden' });
+      var retry = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Try again', hidden: 'hidden' });
       var stopped = false;
       mount([
         el('h2', { class: 'add-modal-title', text: 'One-time setup: start Pool' }),
@@ -245,7 +246,7 @@
           step(2, 'Double-click “Start Pool”', false, [el('p', { class: 'ai-hint', text: '(“Start Pool.bat” on Windows.) A window opens and sets things up.' })]),
           step(3, 'Leave that window open, then come back here', false, [status]),
         ]),
-        el('div', { class: 'add-modal-actions' }, [el('button', { class: 'add-modal-cancel', type: 'button', text: 'Cancel', onclick: function () { stopped = true; closeModal(); } }), retry]),
+        el('div', { class: 'add-modal-actions' }, [el('button', { class: 'btn btn-secondary', type: 'button', text: 'Cancel', onclick: function () { stopped = true; closeModal(); } }), retry]),
       ]);
 
       function start() {
@@ -402,7 +403,7 @@
     }
 
     function terminalButton(label, body, status, after) {
-      var button = el('button', { class: 'add-modal-cancel', type: 'button', text: label });
+      var button = el('button', { class: 'btn btn-secondary', type: 'button', text: label });
       button.addEventListener('click', function () {
         button.disabled = true;
         api('POST', '/api/terminal', body).then(function (r) {
@@ -417,7 +418,7 @@
     }
 
     function checkAgainButton(rerender) {
-      var button = el('button', { class: 'add-modal-cancel', type: 'button', text: 'Check again' });
+      var button = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Check again' });
       button.addEventListener('click', function () {
         button.disabled = true;
         button.textContent = 'Checking…';
@@ -438,7 +439,7 @@
         el('p', { class: 'ai-lede', text: message }),
         el('p', { class: 'ai-hint', text: waiting ? (waiting === 1 ? '1 capture is' : waiting + ' captures are') + ' waiting in your inbox.' : 'Your inbox is empty — add a link any time and drain it from the Inbox.' }),
       ]));
-      var actions = [el('button', { class: 'btn btn-ghost', type: 'button', text: 'Done', onclick: closeModal })];
+      var actions = [el('button', { class: 'btn btn-secondary', type: 'button', text: 'Done', onclick: closeModal })];
       if (waiting) {
         actions.push(el('button', {
           class: 'btn btn-primary',
@@ -530,7 +531,7 @@
       var connectStatus = statusLine();
       var connected = isConnectedTo(ai.id, 'agent');
       var loginStep, connectStep;
-      var connectBtn = el('button', { class: 'add-modal-save', type: 'button', text: 'Connect' });
+      var connectBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
       connectBtn.addEventListener('click', function () {
         connectWith({ ai: ai.id, mode: 'agent', agent: { preset: m.preset } }, connectStatus, connectBtn, connectStep);
       });
@@ -583,7 +584,7 @@
       var provider = cached.presets.providers.find(function (p) { return p.id === m.provider; });
       var status = statusLine();
       var key = el('input', { class: 'add-modal-input ai-mono', type: 'password', autocomplete: 'off', 'aria-label': 'API key', placeholder: hasEnvKey(m.provider) ? 'Found $' + provider.keyEnv + ' — leave empty to use it' : 'Paste your API key' });
-      var next = el('button', { class: 'add-modal-cancel', type: 'button', text: 'Continue' });
+      var next = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Continue' });
       var chooser = el('div', { class: 'ai-row', hidden: 'hidden' });
       var connectStep;
       next.addEventListener('click', function () {
@@ -597,7 +598,7 @@
             return el('option', { value: id, text: id });
           }));
           select.value = r.suggested || r.models[0];
-          var connectBtn = el('button', { class: 'add-modal-save', type: 'button', text: 'Connect' });
+          var connectBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
           connectBtn.addEventListener('click', function () {
             connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, apiKey: key.value, model: select.value } }, status, connectBtn, connectStep);
           });
@@ -635,7 +636,7 @@
       }));
       if (server && server.suggested) select.value = server.suggested;
       var connectStep;
-      var connectBtn = el('button', { class: 'add-modal-save', type: 'button', text: 'Connect' });
+      var connectBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
       connectBtn.addEventListener('click', function () {
         connectWith({ ai: ai.id, mode: 'api', api: { provider: m.provider, model: select.value } }, status, connectBtn, connectStep);
       });
@@ -670,7 +671,7 @@
       guideHeader('Something else', 'Any agent app that can run from a command, or any server that speaks the OpenAI API.');
       var cmdStatus = statusLine();
       var cmd = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Agent command', placeholder: 'e.g. my-agent --headless -p' });
-      var cmdBtn = el('button', { class: 'add-modal-save', type: 'button', text: 'Connect' });
+      var cmdBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
       cmdBtn.addEventListener('click', function () {
         connectWith({ ai: 'other', mode: 'agent', agent: { preset: 'custom', command: cmd.value } }, cmdStatus, cmdBtn);
       });
@@ -678,7 +679,7 @@
       var base = el('input', { class: 'add-modal-input ai-mono', type: 'url', spellcheck: 'false', 'aria-label': 'Base URL', placeholder: 'https://…/v1' });
       var key = el('input', { class: 'add-modal-input ai-mono', type: 'password', autocomplete: 'off', 'aria-label': 'API key', placeholder: 'API key (if it needs one)' });
       var model = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Model', placeholder: 'Model name' });
-      var srvBtn = el('button', { class: 'add-modal-save', type: 'button', text: 'Connect' });
+      var srvBtn = el('button', { class: 'btn btn-primary', type: 'button', text: 'Connect' });
       srvBtn.addEventListener('click', function () {
         connectWith({ ai: 'other', mode: 'api', api: { provider: 'custom', baseUrl: base.value, apiKey: key.value, model: model.value } }, srvStatus, srvBtn);
       });
@@ -745,14 +746,9 @@
       drain.running = false;
       drain.finished = true;
       drain.ok = !!result.ok;
+      // The header button and the Add drawer report how it went; each reads
+      // the refreshed status once this settles.
       refreshStatus();
-      window.UI.toast(result.ok ? 'Drain finished. Reload to see the new references.' : 'Drain finished with problems — the inbox has the details.', {
-        tone: result.ok ? null : 'warn',
-        sticky: true,
-        action: result.ok
-          ? { label: 'Show new references', run: function () { window.location.reload(); } }
-          : { label: 'Open inbox', run: function () { if (window.openInbox) window.openInbox(); } },
-      });
     });
     source.onerror = function () {
       if (source && source.readyState === EventSource.CLOSED) {
@@ -789,8 +785,51 @@
     if (document.visibilityState === 'visible' && !drain.running) refreshStatus();
   });
 
+  // ---- the connected AI's model -----------------------------------------------
+  //
+  // Which model the connected AI analyses with. An API connection lists its
+  // provider's models; an agent app only when the helper can pick for it
+  // (`supported`) — otherwise there is nothing to choose and this resolves
+  // null. Saving re-runs the connection test through /api/connect, so a model
+  // that can't answer never replaces one that can.
+
+  function modelChoices() {
+    var config = cached && cached.config;
+    if (!served || !config || !config.connection) return Promise.resolve(null);
+    var agentMode = config.mode === 'agent';
+    if (agentMode && !(config.agent && config.agent.preset && config.agent.preset !== 'custom')) return Promise.resolve(null);
+    var current = agentMode ? (config.agent && config.agent.model) || '' : config.api.model;
+    return api('POST', '/api/models', { mode: config.mode }).then(function (r) {
+      if (agentMode && !r.supported) return null;
+      var options = (r.models || []).map(function (m) {
+        return typeof m === 'string' ? { id: m, label: m } : m;
+      });
+      if (agentMode) options.unshift({ id: '', label: 'Its own default' });
+      if (current && !options.some(function (o) { return o.id === current; })) options.push({ id: current, label: current });
+      return options.length > 1 || !agentMode ? { options: options, current: current } : null;
+    }, function () {
+      return null;
+    });
+  }
+
+  function setModel(model) {
+    var config = cached.config;
+    var agentMode = config.mode === 'agent';
+    var update = { ai: config.connection.ai, mode: config.mode };
+    if (agentMode) update.agent = { model: model };
+    else update.api = { model: model };
+    return api('POST', '/api/connect', update).then(function (r) {
+      cached = r.status;
+      notify();
+      if (!r.ok) throw new Error(r.message);
+      return r.message;
+    });
+  }
+
   window.LibraryAI = {
     served: served,
+    modelChoices: modelChoices,
+    setModel: setModel,
     status: function () { return cached; },
     refresh: refreshStatus,
     subscribe: function (fn) { listeners.push(fn); },

@@ -107,6 +107,19 @@ function inboxStatus() {
   };
 }
 
+function libraryData() {
+  function fresh(file, key) {
+    var resolved = require.resolve(file);
+    delete require.cache[resolved];
+    return require(file)[key];
+  }
+  return {
+    library: fresh('../data/library.js', 'LIBRARY'),
+    categories: fresh('../data/categories.js', 'CATEGORIES'),
+    designSystems: fresh('../data/design-systems.js', 'DESIGN_SYSTEMS'),
+  };
+}
+
 function status() {
   var config = configModule.loadConfig();
   return {
@@ -227,6 +240,10 @@ async function handleApi(req, res, pathname) {
   if (refused) return send(res, 403, { error: refused });
 
   if (req.method === 'GET' && pathname === '/api/status') return send(res, 200, status());
+
+  // The data files as they are on disk now, so the page can show what a
+  // drain just added without reloading.
+  if (req.method === 'GET' && pathname === '/api/library') return send(res, 200, libraryData());
 
   if (req.method === 'POST' && pathname.indexOf('/api/files/') === 0) return handleFiles(req, res, pathname);
 

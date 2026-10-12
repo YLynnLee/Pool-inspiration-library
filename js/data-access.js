@@ -56,6 +56,33 @@ function setDesignSystems(systems) {
   DESIGN_SYSTEMS.splice.apply(DESIGN_SYSTEMS, [0, DESIGN_SYSTEMS.length].concat(systems));
 }
 
+// Same in-place splice for the categories, which a drain can add to.
+function setCategories(categories) {
+  if (typeof CATEGORIES === 'undefined') return;
+  CATEGORIES.splice.apply(CATEGORIES, [0, CATEGORIES.length].concat(categories));
+}
+
+// Re-reads the data files through the helper and swaps them in place, so a
+// drain's new references show up without a page reload. Resolves false when
+// the page isn't served by the helper (file://) or the helper didn't answer.
+function refreshLibraryData() {
+  if (typeof fetch !== 'function' || !/^https?:$/.test(window.location.protocol)) return Promise.resolve(false);
+  return fetch('/api/library', { cache: 'no-store' })
+    .then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
+    .then(function (data) {
+      setCategories(data.categories);
+      setDesignSystems(data.designSystems);
+      setEntries(data.library);
+      return true;
+    })
+    .catch(function () {
+      return false;
+    });
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { getEntries, getEntry, getCategories, getCategory, getDesignSystem, getDesignSystems, setDesignSystems, setEntries };
+  module.exports = { getEntries, getEntry, getCategories, getCategory, getDesignSystem, getDesignSystems, setDesignSystems, setEntries, setCategories, refreshLibraryData };
 }

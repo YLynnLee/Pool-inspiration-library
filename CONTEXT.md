@@ -67,6 +67,9 @@ a note on what caught the eye. Distinct from **analysis**, which is everything t
 Not "queue" or "backlog": the inbox is a place, and things sit in it without implying an order
 they must be worked in.
 
+In the app the collector never sees the word "inbox": they **add** a reference, and it waits to
+be analysed.
+
 **Drain** — the agent-run pass that empties the inbox: for each line, screenshot and harvest the
 site, analyse the design, write every field of a reference, extract its design system, add both to
 the library, and remove the line. Not "import", "sync" or "process" — a drain is the whole pass,
