@@ -8,3 +8,4 @@
 
 # agent — see `docs/agents/drain.md`.
 
+- https://mistral.ai/
