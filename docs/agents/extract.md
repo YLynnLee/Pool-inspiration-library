@@ -39,7 +39,18 @@ return value to `harvest.json` in the capture's working directory — the digest
 described in `docs/CONTEXT.md`'s **Harvest** entry: colours ranked by painted area, font clusters, a
 spacing histogram, the radius and shadow sets, container widths, and a `notes` array flagging
 anything the harvest itself couldn't see (a thin DOM, a canvas-dominated viewport, skipped
-cross-origin iframes). Record `notes` — they are the harvest's own account of its blind spots, and
+cross-origin iframes or stylesheets, a webfont that never loaded). Two more fields:
+
+- `fontLoading` gives each cluster family's status: `loaded`, `failed`, `loading`, `not loaded`,
+  or `system` (no `@font-face`; it rendered only if installed). A cluster in a family that didn't
+  load was really shown in a fallback — confirm against the screenshots before naming it.
+- `customProperties` lists the `--` properties declared on `:root`/`html`, ranked by how often the
+  stylesheets reference them. They are the site's own token names, the best evidence for
+  semantic keys — but a declaration, not a measurement: a property counts as a token only where
+  its value matches something the harvest saw painted. Values are as authored, so a bare HSL
+  triplet like `22 100% 51.6%` still needs converting.
+
+Record `notes` — they are the harvest's own account of its blind spots, and
 belong in `measurementNotes:` verbatim or paraphrased (see **Declare honesty** below).
 
 ## Interpret

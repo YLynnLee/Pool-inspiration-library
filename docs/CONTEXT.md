@@ -49,9 +49,11 @@ Do's and Don'ts). The word always means that file for a reference. The repo's ow
 
 **Harvest** — the digest of a site's rendered CSS, gathered in the page by
 `scripts/harvest-design.js` and aggregated there before it is read: colours ranked by painted
-area, font clusters, a spacing histogram, the radius and shadow sets, container widths. Evidence
-the agent reasons over, never output it transcribes. Not "scrape" — a harvest measures what the
-browser actually painted, not what a stylesheet declares.
+area, font clusters and whether their webfonts loaded, a spacing histogram, the radius and shadow
+sets, container widths, and the custom properties declared on `:root`. Evidence the agent reasons
+over, never output it transcribes. Not "scrape" — a harvest measures what the browser actually
+painted; the custom properties are the one thing it reads as declared, and only as the site's own
+names for what was painted.
 
 **Extract** — the pass that turns a screenshot and a harvest into a design system: cluster the
 measurements into a named scale, name the colours and their roles, write the prose. Runs inside a

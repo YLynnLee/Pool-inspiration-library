@@ -1,5 +1,7 @@
 // Measures the design tokens a rendered page actually painted: colour by
-// area, font clusters, spacing, radii, shadows, container width. Runs
+// area, font clusters (and whether their webfonts loaded), spacing, radii,
+// shadows, container width — plus the custom properties the site declares
+// on :root, as names for those measurements. Runs
 // standalone in a plain browser console (paste-and-go, no dependencies) or
 // injected by an automation tool after the page settles. The pure
 // aggregation functions below
@@ -16,7 +18,12 @@ var TOP_FONTS = 25;
 var TOP_SPACING = 12;
 var TOP_RADII = 15;
 var TOP_SHADOWS = 10;
+var TOP_CUSTOM_PROPERTIES = 40;
 var SAMPLE_MAX_CHARS = 20;
+var CUSTOM_PROPERTY_VALUE_MAX_CHARS = 60;
+var ROOT_SELECTORS = { ':root': true, html: true, ':host': true };
+var SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+var SVG_SHAPE_TAGS = { path: true, circle: true, rect: true, ellipse: true, polygon: true, polyline: true, line: true, text: true, tspan: true, use: true };
 
 // Parses a computed rgb()/rgba() colour string into a canonical form so
 // `rgb(0, 0, 0)` and `rgba(0, 0, 0, 1)` collapse to one bucket, and a fully
@@ -78,9 +85,89 @@ function aggregateColors(records, topN) {
   });
 }
 
-// The actually-used family is the first name in a computed font-family
+// The colour records one element contributes, each with the area it paints.
+// `color` and `fill` are both inherited, so reading them off every element
+// would credit the body text colour once per level of nesting and paint a
+// phantom black (fill's initial value) over the whole page: `color` only
+// counts where the element carries its own text, `fill` only on SVG shapes.
+function colourRecordsFor(cs, rect, opts) {
+  var records = [];
+  var area = rect.width * rect.height;
+  records.push({ property: 'background-color', color: cs.backgroundColor, area: area });
+  if (opts.hasText && !opts.isSvgShape) {
+    records.push({ property: 'color', color: cs.color, area: area });
+  }
+  if (opts.isSvgShape && typeof cs.fill === 'string' && cs.fill && cs.fill !== 'none') {
+    records.push({ property: 'fill', color: cs.fill, area: area });
+  }
+  var borderWidths = [parseFloat(cs.borderTopWidth) || 0, parseFloat(cs.borderRightWidth) || 0, parseFloat(cs.borderBottomWidth) || 0, parseFloat(cs.borderLeftWidth) || 0];
+  var avgBorderWidth = (borderWidths[0] + borderWidths[1] + borderWidths[2] + borderWidths[3]) / 4;
+  if (avgBorderWidth > 0) {
+    var perimeter = 2 * (rect.width + rect.height);
+    records.push({ property: 'border-color', color: cs.borderTopColor, area: perimeter * avgBorderWidth });
+  }
+  return records;
+}
+
+// The site's own token names: custom properties declared on :root/html,
+// ranked by how many var() references the stylesheets make to them. A
+// utility framework can declare hundreds it never uses, so once anything is
+// referenced the unreferenced ones are dropped. Declared, not painted —
+// evidence for naming the measured values, not a substitute for them.
+function rankCustomProperties(declared, uses, topN) {
+  var limit = topN || TOP_CUSTOM_PROPERTIES;
+  var counts = uses || {};
+  var entries = Object.keys(declared || {})
+    .map(function (name) {
+      var value = (declared[name] || '').toString().trim();
+      return { name: name, value: value.slice(0, CUSTOM_PROPERTY_VALUE_MAX_CHARS), uses: counts[name] || 0 };
+    })
+    .filter(function (entry) {
+      return entry.value;
+    });
+  var anyUsed = entries.some(function (entry) {
+    return entry.uses > 0;
+  });
+  return entries
+    .filter(function (entry) {
+      return !anyUsed || entry.uses > 0;
+    })
+    .sort(function (a, b) {
+      return b.uses - a.uses || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    })
+    .slice(0, limit);
+}
+
+// Whether each family the font clusters name actually loaded. The computed
+// family is the first in the stack whether or not its webfont arrived, so a
+// failed @font-face means the page showed a fallback the clusters don't
+// name. `system` means no @font-face declares it: it rendered only if
+// installed on the capturing machine (or it's a generic like sans-serif).
+function fontLoadStatus(families, faces) {
+  return (families || []).map(function (family) {
+    var key = family.toLowerCase();
+    var statuses = (faces || [])
+      .filter(function (face) {
+        return primaryFontFamily(face.family).toLowerCase() === key;
+      })
+      .map(function (face) {
+        return face.status;
+      });
+    var status = 'system';
+    if (statuses.length) {
+      if (statuses.indexOf('loaded') !== -1) status = 'loaded';
+      else if (statuses.indexOf('error') !== -1) status = 'failed';
+      else if (statuses.indexOf('loading') !== -1) status = 'loading';
+      else status = 'not loaded';
+    }
+    return { family: family, status: status };
+  });
+}
+
+// The family the page asked for is the first name in a computed font-family
 // stack; the rest is the browser's fallback chain, which bloats the digest
-// without telling the agent anything it can't already assume.
+// without telling the agent anything it can't already assume. Whether that
+// first family actually loaded is fontLoadStatus's job.
 function primaryFontFamily(family) {
   var first = (family || '').toString().split(',')[0] || '';
   return first.trim().replace(/^["']|["']$/g, '');
@@ -262,6 +349,79 @@ function ownText(el) {
   return text.trim();
 }
 
+function isSvgShape(el) {
+  return el.namespaceURI === SVG_NAMESPACE && !!SVG_SHAPE_TAGS[el.tagName.toLowerCase()];
+}
+
+// Custom properties declared on :root/html (inside @media, @layer, @supports
+// and @import too) and a count of var() references to each across every
+// readable stylesheet. Values come from the root's computed style, so a
+// property redeclared under a media query reads as it resolved for this
+// capture. Cross-origin sheets without CORS can't be read; they're counted.
+function collectCustomProperties() {
+  var names = {};
+  var uses = {};
+  var unreadableSheets = 0;
+  var varPattern = /var\(\s*(--[A-Za-z0-9_-]+)/g;
+
+  function readStyle(style, isRoot) {
+    if (isRoot) {
+      for (var i = 0; i < style.length; i++) {
+        if (style[i].indexOf('--') === 0) names[style[i]] = true;
+      }
+    }
+    var match;
+    var text = style.cssText || '';
+    varPattern.lastIndex = 0;
+    while ((match = varPattern.exec(text))) uses[match[1]] = (uses[match[1]] || 0) + 1;
+  }
+
+  function walk(rules) {
+    for (var i = 0; i < rules.length; i++) {
+      var rule = rules[i];
+      if (rule.style) {
+        var isRoot = (rule.selectorText || '').split(',').some(function (selector) {
+          return ROOT_SELECTORS[selector.trim()];
+        });
+        readStyle(rule.style, isRoot);
+      }
+      if (rule.styleSheet) readSheet(rule.styleSheet);
+      if (rule.cssRules) walk(rule.cssRules);
+    }
+  }
+
+  function readSheet(sheet) {
+    var rules;
+    try {
+      rules = sheet.cssRules;
+    } catch (err) {
+      unreadableSheets += 1;
+      return;
+    }
+    if (rules) walk(rules);
+  }
+
+  for (var s = 0; s < document.styleSheets.length; s++) readSheet(document.styleSheets[s]);
+  readStyle(document.documentElement.style, true);
+
+  var rootStyle = window.getComputedStyle(document.documentElement);
+  var declared = {};
+  Object.keys(names).forEach(function (name) {
+    declared[name] = rootStyle.getPropertyValue(name);
+  });
+  return { declared: declared, uses: uses, unreadableSheets: unreadableSheets };
+}
+
+function collectFontFaces() {
+  var faces = [];
+  if (document.fonts && typeof document.fonts.forEach === 'function') {
+    document.fonts.forEach(function (face) {
+      faces.push({ family: face.family, status: face.status });
+    });
+  }
+  return faces;
+}
+
 function firstClass(el) {
   var className = el.className && el.className.baseVal !== undefined ? el.className.baseVal : el.className;
   if (!className || typeof className !== 'string') return '';
@@ -315,21 +475,11 @@ function harvestDesign() {
     if (!isVisible(cs, rect)) continue;
 
     var area = rect.width * rect.height;
+    var text = ownText(el);
 
-    colorRecords.push({ property: 'background-color', color: cs.backgroundColor, area: area });
-    colorRecords.push({ property: 'color', color: cs.color, area: area });
-    if (typeof cs.fill === 'string' && cs.fill && cs.fill !== 'none') {
-      colorRecords.push({ property: 'fill', color: cs.fill, area: area });
-    }
+    colorRecords.push.apply(colorRecords, colourRecordsFor(cs, rect, { hasText: !!text, isSvgShape: isSvgShape(el) }));
 
-    var borderWidths = [parseFloat(cs.borderTopWidth) || 0, parseFloat(cs.borderRightWidth) || 0, parseFloat(cs.borderBottomWidth) || 0, parseFloat(cs.borderLeftWidth) || 0];
-    var avgBorderWidth = (borderWidths[0] + borderWidths[1] + borderWidths[2] + borderWidths[3]) / 4;
-    if (avgBorderWidth > 0) {
-      var perimeter = 2 * (rect.width + rect.height);
-      colorRecords.push({ property: 'border-color', color: cs.borderTopColor, area: perimeter * avgBorderWidth });
-    }
-
-    if (ownText(el)) {
+    if (text) {
       fontRecords.push({
         family: cs.fontFamily,
         size: cs.fontSize,
@@ -337,7 +487,7 @@ function harvestDesign() {
         lineHeight: cs.lineHeight,
         letterSpacing: cs.letterSpacing,
         area: area,
-        sample: ownText(el),
+        sample: text,
       });
     }
 
@@ -366,9 +516,28 @@ function harvestDesign() {
   var canvasNote = detectCanvasDominance(canvasArea, window.innerWidth * window.innerHeight);
   if (canvasNote) notes.push(canvasNote);
 
+  var fonts = clusterFonts(fontRecords);
+  var families = [];
+  fonts.forEach(function (cluster) {
+    if (families.indexOf(cluster.fontFamily) === -1) families.push(cluster.fontFamily);
+  });
+  var fontLoading = fontLoadStatus(families, collectFontFaces());
+  fontLoading.forEach(function (entry) {
+    if (entry.status !== 'loaded' && entry.status !== 'system') {
+      notes.push('font "' + entry.family + '" is declared by @font-face but ' + entry.status + ' — text set in it may have rendered in a fallback from its stack; check the screenshots');
+    }
+  });
+
+  var custom = collectCustomProperties();
+  if (custom.unreadableSheets > 0) {
+    notes.push(custom.unreadableSheets + ' cross-origin stylesheet' + (custom.unreadableSheets === 1 ? '' : 's') + ' unreadable — custom properties declared there are missing from customProperties');
+  }
+
   return {
     colours: aggregateColors(colorRecords),
-    fonts: clusterFonts(fontRecords),
+    fonts: fonts,
+    fontLoading: fontLoading,
+    customProperties: rankCustomProperties(custom.declared, custom.uses),
     spacing: buildSpacingHistogram(spacingValues),
     radii: aggregateRadii(radiusRecords),
     shadows: aggregateShadows(shadowRecords),
@@ -386,6 +555,9 @@ typeof document !== 'undefined' && typeof __poolHarvestAutoRunSkip__ === 'undefi
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     normalizeColor: normalizeColor,
+    colourRecordsFor: colourRecordsFor,
+    rankCustomProperties: rankCustomProperties,
+    fontLoadStatus: fontLoadStatus,
     primaryFontFamily: primaryFontFamily,
     aggregateColors: aggregateColors,
     clusterFonts: clusterFonts,

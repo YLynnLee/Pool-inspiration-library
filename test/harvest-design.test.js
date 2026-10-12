@@ -2,6 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   normalizeColor,
+  colourRecordsFor,
+  rankCustomProperties,
+  fontLoadStatus,
   primaryFontFamily,
   aggregateColors,
   clusterFonts,
@@ -71,6 +74,106 @@ test('aggregateColors: caps at topN by area', () => {
   const result = aggregateColors(records, 15);
   assert.equal(result.length, 15);
   assert.equal(result[0].color, 'rgb(19, 19, 19)');
+});
+
+const plainStyle = {
+  backgroundColor: 'rgba(0, 0, 0, 0)',
+  color: 'rgb(20, 20, 20)',
+  fill: 'rgb(0, 0, 0)',
+  borderTopWidth: '0px',
+  borderRightWidth: '0px',
+  borderBottomWidth: '0px',
+  borderLeftWidth: '0px',
+  borderTopColor: 'rgb(20, 20, 20)',
+};
+const box = { width: 100, height: 50 };
+
+test('colourRecordsFor: an element without its own text contributes no text colour', () => {
+  const records = colourRecordsFor(plainStyle, box, { hasText: false, isSvgShape: false });
+  assert.ok(!records.some((r) => r.property === 'color'));
+});
+
+test('colourRecordsFor: an element with its own text contributes its text colour', () => {
+  const records = colourRecordsFor(plainStyle, box, { hasText: true, isSvgShape: false });
+  assert.deepEqual(
+    records.find((r) => r.property === 'color'),
+    { property: 'color', color: 'rgb(20, 20, 20)', area: 5000 }
+  );
+});
+
+test("colourRecordsFor: HTML elements don't paint fill's inherited black", () => {
+  const records = colourRecordsFor(plainStyle, box, { hasText: true, isSvgShape: false });
+  assert.ok(!records.some((r) => r.property === 'fill'));
+});
+
+test('colourRecordsFor: SVG shapes contribute fill, not text colour', () => {
+  const records = colourRecordsFor(plainStyle, box, { hasText: true, isSvgShape: true });
+  assert.ok(records.some((r) => r.property === 'fill'));
+  assert.ok(!records.some((r) => r.property === 'color'));
+});
+
+test('colourRecordsFor: nested text-free wrappers no longer outrank the page ground', () => {
+  const ground = { ...plainStyle, backgroundColor: 'rgb(255, 255, 255)' };
+  const records = [
+    ...colourRecordsFor(ground, { width: 1000, height: 1000 }, { hasText: false, isSvgShape: false }),
+    ...colourRecordsFor(plainStyle, { width: 1000, height: 1000 }, { hasText: false, isSvgShape: false }),
+    ...colourRecordsFor(plainStyle, { width: 1000, height: 900 }, { hasText: false, isSvgShape: false }),
+    ...colourRecordsFor(plainStyle, { width: 600, height: 20 }, { hasText: true, isSvgShape: false }),
+  ];
+  assert.equal(aggregateColors(records, 15)[0].color, 'rgb(255, 255, 255)');
+});
+
+test('rankCustomProperties: ranks by var() references and drops unreferenced ones', () => {
+  const result = rankCustomProperties(
+    { '--accent': ' #c6ff00 ', '--ground': '#0a0a0b', '--red-50': '#fef2f2' },
+    { '--ground': 9, '--accent': 3 },
+    40
+  );
+  assert.deepEqual(result, [
+    { name: '--ground', value: '#0a0a0b', uses: 9 },
+    { name: '--accent', value: '#c6ff00', uses: 3 },
+  ]);
+});
+
+test('rankCustomProperties: keeps declared ones, alphabetically, when no references are seen', () => {
+  const result = rankCustomProperties({ '--b': '2px', '--a': '1px', '--empty': ' ' }, {}, 40);
+  assert.deepEqual(
+    result.map((r) => r.name),
+    ['--a', '--b']
+  );
+});
+
+test('rankCustomProperties: truncates long values and caps at topN', () => {
+  const declared = {};
+  const uses = {};
+  for (let i = 0; i < 50; i++) {
+    declared[`--v${i}`] = 'x'.repeat(200);
+    uses[`--v${i}`] = i + 1;
+  }
+  const result = rankCustomProperties(declared, uses, 40);
+  assert.equal(result.length, 40);
+  assert.equal(result[0].name, '--v49');
+  assert.ok(result[0].value.length <= 60);
+});
+
+test('fontLoadStatus: loaded if any face of the family loaded, matching quotes and case', () => {
+  const faces = [
+    { family: '"Inter"', status: 'unloaded' },
+    { family: 'inter', status: 'loaded' },
+  ];
+  assert.deepEqual(fontLoadStatus(['Inter'], faces), [{ family: 'Inter', status: 'loaded' }]);
+});
+
+test('fontLoadStatus: failed, loading, not loaded and system', () => {
+  const faces = [
+    { family: 'Broken', status: 'error' },
+    { family: 'Slow', status: 'loading' },
+    { family: 'Idle', status: 'unloaded' },
+  ];
+  assert.deepEqual(
+    fontLoadStatus(['Broken', 'Slow', 'Idle', 'Helvetica Neue'], faces).map((r) => r.status),
+    ['failed', 'loading', 'not loaded', 'system']
+  );
 });
 
 test('primaryFontFamily: drops the fallback chain and surrounding quotes', () => {
