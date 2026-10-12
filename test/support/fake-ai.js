@@ -53,6 +53,7 @@ function createFakeAi(initial) {
         return result;
       });
     },
+    checkLogin: function (update) { return answer('checkLogin', script.checkLogin || { ok: false, loggedOut: true }, update); },
     disconnect: function () { calls.push({ name: 'disconnect' }); config.connection = null; },
     runTerminalAction: function (body) { return answer('runTerminalAction', { ok: true, message: 'A Terminal window opened.' }, body); },
     runDrain: function (_config, options) {

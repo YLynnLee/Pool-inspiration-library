@@ -26,12 +26,16 @@ var CONFIG_FILE = path.join(ROOT, '.drain.config.json');
 //
 // modelFlag: how the agent is told which model to use; the chosen model is
 // added at run time (agentCommand), so the command itself stays the preset's.
-// models: shortcuts offered in the app, [id, label]. listModels: a command
+// models: the choices offered in the app, [id, label] — Claude Code has no
+// command that lists them, so they are named here. listModels: a command
 // that prints the models this agent can use on this computer, one per line
 // (the id first, then an optional tab and label). An agent with neither
 // still takes a typed model name.
 var AGENT_PRESETS = [
-  { id: 'claude', label: 'Claude Code', command: 'claude --print --dangerously-skip-permissions', modelFlag: '--model', models: [['opus', 'Opus 5.5'], ['sonnet', 'Sonnet 5.5'], ['haiku', 'Haiku 5.5'], ['fable', 'Fable 5.1']] },
+  { id: 'claude', label: 'Claude Code', command: 'claude --print --dangerously-skip-permissions', modelFlag: '--model', models: [
+    ['claude-opus-5-5', 'Opus 5.5'], ['claude-sonnet-5-5', 'Sonnet 5.5'], ['claude-fable-5-1', 'Fable 5.1'], ['claude-haiku-5-5', 'Haiku 5.5'],
+    ['claude-opus-5', 'Opus 5'], ['claude-sonnet-5', 'Sonnet 5'], ['claude-fable-5', 'Fable 5'], ['claude-haiku-4-5', 'Haiku 4.5'],
+  ] },
   { id: 'codex', label: 'Codex CLI', command: 'codex exec --dangerously-bypass-approvals-and-sandbox', modelFlag: '--model' },
   // agy's print mode gives up after 5 minutes by default; a drain takes longer.
   { id: 'antigravity', label: 'Antigravity CLI', command: 'agy --dangerously-skip-permissions --print-timeout 60m -p', modelFlag: '--model', listModels: 'agy models' },

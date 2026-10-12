@@ -286,6 +286,27 @@ test('subscription: exactly one primary at every step — Install, then Open to 
   });
 });
 
+test('subscription: once the login in the Terminal window works, the log in step ticks by itself and Connect is next', async (t) => {
+  const fake = createFakeAi({ detect: claudeApp(true, 'unknown') });
+  await withApp(t, { ai: fake }, async (app) => {
+    await openWindow(app);
+    await waitForPane(app, 'Claude');
+    await buttonNamed(app, 'Open Claude Code to log in').click();
+    const step = dialog(app).locator('.ai-step[data-step="2"]');
+    await app.page.waitForFunction(() => document.querySelector('.ai-step[data-step="2"] .ai-step-title, .ai-step[data-step="2"]'));
+    assert.equal(await step.evaluate((n) => n.classList.contains('is-done')), false, 'not ticked while the login has not finished');
+
+    fake.script({ checkLogin: { ok: true } });
+    await app.page.waitForFunction(() => {
+      const n = document.querySelector('.ai-step[data-step="2"]');
+      return n && n.classList.contains('is-done');
+    }, null, { timeout: 15000 });
+    assert.match(await step.innerText(), /Logged in to Claude Code/);
+    assert.equal(fake.calls.filter((c) => c.name === 'connect').length, 0, 'checking the login connects nothing');
+    await assertOnePrimary(app, 'Connect');
+  });
+});
+
 test('subscription: installed but not known to be logged in — log in is primary and Connect stays beside it, secondary', async (t) => {
   for (const signedIn of ['unknown', 'no']) {
     const fake = createFakeAi({ detect: claudeApp(true, signedIn) });

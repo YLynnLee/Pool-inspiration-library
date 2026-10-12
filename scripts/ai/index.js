@@ -294,6 +294,22 @@ function connectionFailure(config, outcome, text) {
   return null;
 }
 
+// Is the agent app logged in yet? The same test as Connect, run without
+// saving a connection, so the window can tick its login step once the
+// collector has finished logging in. A pass or a login prompt is remembered
+// for that app, like a connect would.
+async function checkLogin(update, storage) {
+  var draft = configModule.mergeConfig(configModule.loadConfig(storage), Object.assign({}, update, { mode: 'agent' }));
+  draft.connection = null;
+  var result = await testConnection(draft);
+  var event = result.ok ? 'answered' : result.loggedOut ? 'loggedOut' : null;
+  if (event) {
+    var remembered = configModule.recordLogin(draft, draft.agent.preset, event);
+    configModule.saveConfig(Object.assign(configModule.loadConfig(storage), { logins: remembered.logins }), storage);
+  }
+  return { ok: !!result.ok, loggedOut: !!result.loggedOut };
+}
+
 // A drain, and afterwards a record of why it stopped when the connection
 // itself was the reason, kept on the connection for the header and window.
 async function runDrainRecording(config, options, storage) {
@@ -331,6 +347,7 @@ function create(storage) {
     detect: function (options) { return detect(options, storage); },
     models: function (update) { return models(update, storage); },
     connect: function (update) { return connect(update, storage); },
+    checkLogin: function (update) { return checkLogin(update, storage); },
     disconnect: function () { return disconnect(storage); },
     runTerminalAction: runTerminalAction,
     refreshPath: refreshPath,

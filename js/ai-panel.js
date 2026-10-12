@@ -720,6 +720,38 @@
   // AIs whose login window has been opened this session, so step 2 stays
   // ticked when the guide re-renders (e.g. after "Check again").
   var loginOpened = {};
+  // AIs whose login has been seen to work since the window opened its login
+  // step, so the step shows a tick without the collector doing anything more.
+  var loginVerified = {};
+  var loginWatching = {};
+
+  // After the login window opens, quietly ask the helper whether the app
+  // answers yet, until it does (or a few minutes pass). Nothing is connected
+  // by this: it only lets the login step tick.
+  function watchLogin(aiId, preset) {
+    if (loginWatching[aiId] || loginVerified[aiId]) return;
+    loginWatching[aiId] = true;
+    var attempts = 0;
+    function stop() { delete loginWatching[aiId]; }
+    function next() {
+      window.setTimeout(function () {
+        if (!win || !loginWatching[aiId]) return stop();
+        api('POST', '/api/login-check', { ai: aiId, agent: { preset: preset } }).then(function (r) {
+          if (r.ok) {
+            loginVerified[aiId] = true;
+            rememberSignedIn(preset, 'yes');
+            stop();
+            renderPane();
+          } else if (++attempts < 15) {
+            next();
+          } else {
+            stop();
+          }
+        }, stop);
+      }, attempts === 0 ? 4000 : 8000);
+    }
+    next();
+  }
 
   function statusSlot() {
     return el('div', { class: 'notice-slot' });
@@ -814,7 +846,7 @@
     var agent = found && found.agents.find(function (x) { return x.id === m.preset; });
     var signedIn = agent ? agent.signedIn || 'unknown' : 'unknown';
     var connected = isConnectedTo(ai.id, 'agent');
-    var loggedIn = connected || signedIn === 'yes';
+    var loggedIn = connected || signedIn === 'yes' || !!loginVerified[ai.id];
     var opened = !!loginOpened[ai.id];
     var tried = ui.tried[ai.id];
     var installStatus = statusSlot();
@@ -856,6 +888,7 @@
           run: terminalRun({ ai: ai.id, action: 'login' }, loginStatus, function () {
             loginOpened[ai.id] = true;
             renderPane();
+            watchLogin(ai.id, m.preset);
           }),
         }],
         slot: loginStatus,
@@ -1196,13 +1229,15 @@
     if (problem.kind === 'logged-out') {
       steps = [
         {
-          title: 'Log in to ' + app + ' again',
+          title: loginVerified[connection.ai] ? 'Logged in to ' + app : 'Log in to ' + app + ' again',
+          done: !!loginVerified[connection.ai],
           body: [hint('Opens ' + app + ' in a Terminal window. Log in there, then come back.')],
           actions: [{
             label: 'Open ' + app + ' to log in',
             run: terminalRun({ ai: connection.ai, action: 'login' }, loginStatus, function () {
               loginOpened[connection.ai] = true;
               renderPane();
+              if (config.mode === 'agent') watchLogin(connection.ai, config.agent.preset);
             }),
           }],
           handedOff: !!loginOpened[connection.ai],
@@ -1308,7 +1343,7 @@
       });
       var free = agentMode ? r.free : true;
       if (agentMode) options.unshift({ id: '', label: 'Automatic (' + appName + ' chooses)' });
-      if (current && !options.some(function (o) { return o.id === current; })) options.push({ id: current, label: current });
+      if (current && !options.some(function (o) { return o.id === current; })) options.push({ id: current, label: window.LinkStatus.modelName(current) });
       if (free) options.push({ id: OTHER_MODEL, label: 'Other…' });
       options.forEach(function (o) {
         select.appendChild(el('option', { value: o.id, text: o.label }));

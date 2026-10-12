@@ -283,6 +283,10 @@ function createServer(options) {
       return send(res, 200, Object.assign(result, { status: status() }));
     }
 
+    if (req.method === 'POST' && pathname === '/api/login-check') {
+      return send(res, 200, await ai.checkLogin(await readBody(req)));
+    }
+
     if (req.method === 'POST' && pathname === '/api/terminal') {
       return send(res, 200, await ai.runTerminalAction(await readBody(req)));
     }
