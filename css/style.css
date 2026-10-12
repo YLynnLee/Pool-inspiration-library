@@ -144,7 +144,7 @@ button {
 
 .search-wrap {
   position: relative;
-  flex: 1 1 320px;
+  flex: 1 1 100%;
   min-width: 0;
 }
 
@@ -1839,10 +1839,6 @@ a.btn {
 
 .notice-slot:empty {
   display: none;
-}
-
-.notice-slot {
-  margin-top: 14px;
 }
 
 /* ---- status label (UI.status) ---- */

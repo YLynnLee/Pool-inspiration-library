@@ -448,14 +448,15 @@
     var d = drawer;
     var status = AI.status();
     d.list.textContent = '';
-    var result = derived();
-    d.countLabel.textContent = result.links.length ? String(result.links.length) : '';
-    if (!result.links.length) {
+    // Added links are in the library now; they leave the list.
+    var links = derived().links.filter(function (link) { return link.status !== 'added'; });
+    d.countLabel.textContent = links.length ? String(links.length) : '';
+    if (!links.length) {
       d.list.appendChild(el('div', { class: 'inbox-empty' }, [el('p', { text: 'Nothing added yet.' })]));
       return;
     }
     var busy = AI.drain.running;
-    d.list.appendChild(el('ul', { class: 'link-rows' }, result.links.map(function (link) {
+    d.list.appendChild(el('ul', { class: 'link-rows' }, links.map(function (link) {
       return buildLinkRow(link, busy);
     })));
     if (status && status.inbox && status.inbox.malformed) {
@@ -676,6 +677,11 @@
       });
       var log = buildLog();
       d.live = { bar: bar, title: title, line: line, log: log.querySelector('pre') };
+      if (d.clock) window.clearInterval(d.clock);
+      d.clock = window.setInterval(function () {
+        if (drawer === d && d.live && AI.drain.running) updateRunning(d.live);
+        else window.clearInterval(d.clock);
+      }, 1000);
       d.footer.appendChild(title);
       d.footer.appendChild(bar);
       d.footer.appendChild(line);
@@ -711,6 +717,10 @@
       live.bar.firstChild.style.width = '';
       live.title.textContent = 'Analysing…';
     }
+    // A clock beside the title is the "still working" signal when the AI is
+    // quiet for a minute or two between links.
+    var secs = drain.startedAt ? Math.max(0, Math.floor((Date.now() - drain.startedAt) / 1000)) : 0;
+    live.title.textContent += ' · ' + Math.floor(secs / 60) + ':' + ('0' + (secs % 60)).slice(-2);
     live.line.textContent = lastUsefulLine(drain.lines) || 'Starting…';
     var pre = live.log;
     var atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;

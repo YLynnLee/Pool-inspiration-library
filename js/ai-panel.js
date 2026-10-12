@@ -1481,11 +1481,12 @@
   // API drains log "[2/5] https://…" per capture, which gives a real
   // count; agent drains don't, so their progress is just the latest line.
 
-  var drain = { running: false, lines: [], step: 0, total: 0, currentUrl: '', ok: null, finished: false, error: '' };
+  var drain = { running: false, startedAt: 0, lines: [], step: 0, total: 0, currentUrl: '', ok: null, finished: false, error: '' };
   var source = null;
 
   function resetDrain() {
     drain.lines = [];
+    drain.startedAt = Date.now();
     drain.step = 0;
     drain.total = 0;
     drain.currentUrl = '';
@@ -1498,12 +1499,17 @@
     drain.lines.push(line);
     if (drain.lines.length > 2000) drain.lines.shift();
     var m = /^\[(\d+)\/(\d+)\] (.+)$/.exec(line);
+    var moved = false;
     if (m) {
+      moved = drain.step !== Number(m[1]);
       drain.step = Number(m[1]);
       drain.total = Number(m[2]);
       drain.currentUrl = m[3];
     }
     notify();
+    // A link just finished: recount the inbox so the list ticks it off now,
+    // not at the end of the run.
+    if (moved) refreshStatus();
   }
 
   function followDrain() {

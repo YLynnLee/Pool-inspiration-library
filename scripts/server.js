@@ -173,6 +173,28 @@ function createServer(options) {
     job.clients.forEach(function (res) { res.write(frame); });
   }
 
+  function watchInboxProgress(log, url) {
+    var start = readInbox();
+    var total = url ? 1 : start.captures;
+    if (!total) return function () {};
+    var shown = '';
+    function tick() {
+      var now = readInbox();
+      var waiting = now.urls || [];
+      var step = url ? 1 : Math.min(total, Math.max(0, total - now.captures) + 1);
+      var current = url || waiting[0] || (start.urls || [])[0] || '';
+      if (!current) return;
+      var line = '[' + step + '/' + total + '] ' + current;
+      if (line !== shown) {
+        shown = line;
+        log(line);
+      }
+    }
+    tick();
+    var timer = setInterval(tick, 2000);
+    return function () { clearInterval(timer); };
+  }
+
   function startJob(config, url) {
     job = { id: Date.now().toString(36), running: true, startedAt: new Date().toISOString(), lines: [], clients: new Set(), controller: new AbortController() };
     var current = job;
@@ -181,6 +203,11 @@ function createServer(options) {
       if (current.lines.length > MAX_LOG_LINES) current.lines.shift();
       broadcast('line', line);
     };
+    // An agent prints nothing until it is done, so the page would have no
+    // count to show. The inbox is the truth: each capture the agent commits
+    // leaves it, so watch it and log the same "[n/total] url" line an API
+    // drain does.
+    var stopWatching = config.mode === 'agent' ? watchInboxProgress(log, url) : function () {};
     ai.runDrain(config, { url: url || undefined, log: log, signal: current.controller.signal, remaining: function () { return readInbox().captures; } })
       .then(function (outcome) {
         current.ok = outcome.code === undefined || outcome.code === 0;
@@ -189,6 +216,7 @@ function createServer(options) {
         current.ok = false;
       })
       .then(function () {
+        stopWatching();
         current.running = false;
         current.finishedAt = new Date().toISOString();
         broadcast('end', { ok: current.ok });
