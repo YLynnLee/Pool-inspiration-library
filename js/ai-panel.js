@@ -717,8 +717,9 @@
     }));
   }
 
-  // AIs whose login window has been opened this session, so step 2 stays
-  // ticked when the guide re-renders (e.g. after "Check again").
+  // AIs whose login window has been opened this session. Step 2 is ticked as
+  // soon as it is (and stays ticked when the guide re-renders, e.g. after
+  // "Check again"); "Open … to log in" stays beside it to open it again.
   var loginOpened = {};
   // AIs whose login has been seen to work since the window opened its login
   // step, so the step shows a tick without the collector doing anything more.
@@ -873,10 +874,10 @@
         slot: installStatus,
       },
       {
-        title: loggedIn ? (ui.disconnected[ai.id] ? 'Still logged in to ' : 'Logged in to ') + m.app : 'Log in to ' + m.app,
-        done: loggedIn,
+        title: loggedIn ? (ui.disconnected[ai.id] ? 'Still logged in to ' : 'Logged in to ') + m.app
+          : installed && opened ? 'Opened ' + m.app + ' to log in' : 'Log in to ' + m.app,
+        done: loggedIn || (installed && opened),
         alsoOpen: !loggedIn,
-        handedOff: installed && opened,
         body: [
           hint('Needs ' + m.needs.charAt(0).toLowerCase() + m.needs.slice(1)),
           hint(m.login.steps),
@@ -1229,8 +1230,10 @@
     if (problem.kind === 'logged-out') {
       steps = [
         {
-          title: loginVerified[connection.ai] ? 'Logged in to ' + app : 'Log in to ' + app + ' again',
-          done: !!loginVerified[connection.ai],
+          title: loginVerified[connection.ai] ? 'Logged in to ' + app
+            : loginOpened[connection.ai] ? 'Opened ' + app + ' to log in' : 'Log in to ' + app + ' again',
+          done: !!(loginVerified[connection.ai] || loginOpened[connection.ai]),
+          alsoOpen: !loginVerified[connection.ai],
           body: [hint('Opens ' + app + ' in a Terminal window. Log in there, then come back.')],
           actions: [{
             label: 'Open ' + app + ' to log in',
@@ -1240,7 +1243,6 @@
               if (config.mode === 'agent') watchLogin(connection.ai, config.agent.preset);
             }),
           }],
-          handedOff: !!loginOpened[connection.ai],
           slot: loginStatus,
         },
         { title: 'Check again', body: [hint('Pool checks ' + app + ' answers.')], actions: [{ label: 'I’ve logged in — check again', run: check }], slot: checkStatus },
