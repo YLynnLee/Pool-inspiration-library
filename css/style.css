@@ -913,6 +913,18 @@ kbd,
   margin-top: 28px;
 }
 
+/* Between sections inside a tab, the breakdown reads as a sequence of
+   distinct subjects (colours, type, spacing...), so they get room. */
+.tab-panel > .entry-section + .entry-section {
+  margin-top: 72px;
+}
+
+@media (max-width: 640px) {
+  .tab-panel > .entry-section + .entry-section {
+    margin-top: 56px;
+  }
+}
+
 .design-md-text {
   font-family: var(--font-mono);
   font-size: 13px;

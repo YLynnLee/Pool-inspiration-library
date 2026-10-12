@@ -344,7 +344,7 @@
     var input = el('input', {
       class: 'search-input',
       type: 'text',
-      placeholder: 'Search references, keywords, categories…',
+      placeholder: window.matchMedia('(max-width: 720px)').matches ? 'Search references…' : 'Search references, keywords, categories…',
       'aria-label': 'Search references',
       role: 'combobox',
       'aria-autocomplete': 'list',
