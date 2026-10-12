@@ -244,10 +244,10 @@ test('removeCaptureLine: only removes the first matching occurrence', () => {
   assert.equal(result, '- https://a.com\n');
 });
 
-test('serializeLibrary: round-trips the real data/library.js byte-identically when no data has changed', () => {
-  const filePath = path.join(__dirname, '..', 'data', 'library.js');
+test('serializeLibrary: round-trips the example data/library.js byte-identically when no data has changed', () => {
+  const filePath = path.join(__dirname, 'fixtures', 'data', 'library.js');
   const onDisk = fs.readFileSync(filePath, 'utf8');
-  const { LIBRARY } = require('../data/library.js');
+  const { LIBRARY } = require('./fixtures/data/library.js');
   assert.equal(serializeLibrary(LIBRARY), onDisk);
 });
 
@@ -324,10 +324,10 @@ test('serializeLibrary: an optional status/draftReason pair is included only whe
   assert.equal(source2.indexOf('draftReason:'), -1);
 });
 
-test('serializeCategories: round-trips the real data/categories.js byte-identically when no data has changed', () => {
-  const filePath = path.join(__dirname, '..', 'data', 'categories.js');
+test('serializeCategories: round-trips the example data/categories.js byte-identically when no data has changed', () => {
+  const filePath = path.join(__dirname, 'fixtures', 'data', 'categories.js');
   const onDisk = fs.readFileSync(filePath, 'utf8');
-  const { CATEGORIES } = require('../data/categories.js');
+  const { CATEGORIES } = require('./fixtures/data/categories.js');
   assert.equal(serializeCategories(CATEGORIES), onDisk);
 });
 
@@ -341,7 +341,7 @@ test('serializeCategories: output re-parses to equivalent data via a real JS eva
 });
 
 test('serializeCategories: appending a category leaves every existing block untouched', () => {
-  const { CATEGORIES } = require('../data/categories.js');
+  const { CATEGORIES } = require('./fixtures/data/categories.js');
   const before = serializeCategories(CATEGORIES);
   const after = serializeCategories(CATEGORIES.concat([makeCategoryEntry({ id: 'new-one' })]));
   assert.equal(after.indexOf(before.slice(0, before.lastIndexOf('];'))), 0);

@@ -44,8 +44,8 @@ guide" or "theme".
 **DESIGN.md** — the file a design system serialises to, in the format specified by
 `google-labs-code/design.md`: YAML front matter carrying the tokens, then prose sections in the
 canonical order (Overview, Colors, Typography, Layout, Elevation & Depth, Shapes, Components,
-Do's and Don'ts). The word always means that file for a reference. The repo's own root
-`DESIGN.md` is simply the app's design system in the same format, not a different kind of thing.
+Do's and Don'ts). The word always means that file for a reference. The repo's own
+`docs/DESIGN.md` is simply the app's design system in the same format, not a different kind of thing.
 
 **Harvest** — the digest of a site's rendered CSS, gathered in the page by
 `scripts/harvest-design.js` and aggregated there before it is read: colours ranked by painted
@@ -107,7 +107,7 @@ drain; it never talks to a model itself.
 **The helper** — `scripts/server.js`, a local process started by double-clicking "Start
 Pool" (or `npm start`) that serves the app
 on `localhost` and runs drains on the Drain panel's behalf, either by launching the collector's
-agent CLI or by calling a model API directly. See `SECURITY.md`.
+agent CLI or by calling a model API directly. See `.github/SECURITY.md`.
 
 **The agent** — whichever AI coding agent the collector runs in this repo (Claude Code, Codex,
 OpenCode, Gemini CLI, …) between sessions of the collector using the app. All analysis and all

@@ -43,7 +43,7 @@ function buildSystemPrompt() {
     '<document name="docs/agents/drain-result.md">', readDoc('docs/agents/drain-result.md'), '</document>',
     '<document name="docs/agents/extract.md">', readDoc('docs/agents/extract.md'), '</document>',
     '<document name="docs/agents/image-prompt.md">', readDoc('docs/agents/image-prompt.md'), '</document>',
-    '<document name="CONTEXT.md">', readDoc('CONTEXT.md'), '</document>',
+    '<document name="docs/CONTEXT.md">', readDoc('docs/CONTEXT.md'), '</document>',
   ].join('\n');
 }
 

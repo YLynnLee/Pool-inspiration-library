@@ -493,7 +493,7 @@ function serializeDesignSystems(entries) {
 // Canonical section order. Google
 // accepts a couple of heading aliases (e.g. "Brand & Style" for Overview);
 // this repo always emits the primary name, matching the app's own
-// DESIGN.md at the repo root.
+// docs/DESIGN.md.
 var DESIGN_MD_SECTION_ORDER = [
   { key: 'overview', heading: 'Overview' },
   { key: 'colors', heading: 'Colors' },

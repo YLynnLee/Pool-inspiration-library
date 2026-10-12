@@ -316,9 +316,9 @@ function evalDesignSystemsSource(source) {
   return moduleObj.exports.DESIGN_SYSTEMS;
 }
 
-test('serializeDesignSystems: round-trips the real data/design-systems.js byte-identically when no data has changed', () => {
-  const onDisk = fs.readFileSync(path.join(__dirname, '..', 'data', 'design-systems.js'), 'utf8');
-  const { DESIGN_SYSTEMS } = require('../data/design-systems.js');
+test('serializeDesignSystems: round-trips the example data/design-systems.js byte-identically when no data has changed', () => {
+  const onDisk = fs.readFileSync(path.join(__dirname, 'fixtures', 'data', 'design-systems.js'), 'utf8');
+  const { DESIGN_SYSTEMS } = require('./fixtures/data/design-systems.js');
   assert.equal(serializeDesignSystems(DESIGN_SYSTEMS), onDisk);
 });
 
@@ -376,7 +376,7 @@ test('parseDosAndDonts: text with no recognised heading yields two empty lists',
 });
 
 test('parseDosAndDonts: real Locomotive and Ciao Energy fixtures parse into non-empty balanced lists', () => {
-  const { DESIGN_SYSTEMS } = require('../data/design-systems.js');
+  const { DESIGN_SYSTEMS } = require('./fixtures/data/design-systems.js');
   DESIGN_SYSTEMS.forEach((entry) => {
     const result = parseDosAndDonts(entry.sections.dosAndDonts);
     assert.ok(result.dos.length > 0, entry.referenceId + ' should have at least one do');

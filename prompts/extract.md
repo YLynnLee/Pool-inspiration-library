@@ -1,7 +1,7 @@
 Extract a design system for one reference in this Pool repo by following the
 procedure in `docs/agents/extract.md` exactly. Read it first; it is the single source of truth,
 including the honesty declaration and the lint pass. Vocabulary (design system, DESIGN.md,
-harvest, extract) is defined in `CONTEXT.md`.
+harvest, extract) is defined in `docs/CONTEXT.md`.
 
 - `node scripts/capture.js <sourceUrl> --harvest-only` visits the page and writes `harvest.json`.
   Read it against the reference's existing screenshots in `images/`.

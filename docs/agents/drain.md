@@ -1,7 +1,7 @@
 # The Drain Procedure
 
 A drain is a pass over `inbox.md`, run by the agent when the collector asks for it (see
-`CONTEXT.md` for the vocabulary — capture, inbox, drain, park, draft). Any agent can run it: the
+`docs/CONTEXT.md` for the vocabulary — capture, inbox, drain, park, draft). Any agent can run it: the
 mechanical half (browser capture, dedupe, file writes, write order) is done by three scripts, and
 the agent's half is looking at screenshots and writing one JSON file per capture.
 

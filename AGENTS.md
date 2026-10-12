@@ -45,9 +45,9 @@ model servers and offers API-key providers. Once one passes its connection test,
 runs. It works with an agent app (the CLIs above, or any command) or a model API (Anthropic,
 OpenAI, Gemini, OpenRouter, Ollama, LM Studio, any OpenAI-compatible server). The choice is saved to `.drain.config.json` (gitignored; API keys go
 to the OS secret store, not this file — `scripts/ai/secrets.js`), and `node scripts/drain-run.js` runs the same drain from a terminal. See
-`SECURITY.md`.
+`.github/SECURITY.md`.
 
 Every drain is started by hand — from `/drain`, the app's Drain button, or `node scripts/drain-run.js`.
 There is no scheduled or unattended mode.
 
-The vocabulary used in code and docs is in `CONTEXT.md`.
+The vocabulary used in code and docs is in `docs/CONTEXT.md`.

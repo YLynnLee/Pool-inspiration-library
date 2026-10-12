@@ -6,7 +6,7 @@ const path = require('node:path');
 const childProcess = require('node:child_process');
 const lock = require('../scripts/lock.js');
 const atomicWrite = require('../scripts/atomic-write.js').writeAtomic;
-const { CATEGORIES } = require('../data/categories.js');
+const { CATEGORIES } = require('./fixtures/data/categories.js');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -86,7 +86,8 @@ test('atomicWrite never leaves a partially-written target: the file exists in fu
 // finished last would silently overwrite the other's addition.
 test('two commit.js processes writing at once do not lose either reference', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pool-race-'));
-  ['js', 'data', 'scripts'].forEach((d) => fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true }));
+  ['js', 'scripts'].forEach((d) => fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true }));
+  fs.cpSync(path.join(__dirname, 'fixtures', 'data'), path.join(dir, 'data'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'images'));
 
   function makeResult(id) {

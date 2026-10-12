@@ -2,7 +2,7 @@
 
 Extraction is the pass that turns a reference's rendered page into a design system: a measured
 digest plus the agent's interpretation of it, written as one entry in `data/design-systems.js` and
-serialisable to a lint-clean DESIGN.md (see `CONTEXT.md` for the vocabulary — design system,
+serialisable to a lint-clean DESIGN.md (see `docs/CONTEXT.md` for the vocabulary — design system,
 DESIGN.md, harvest, extract — following Google's format, unextended). It is invoked standalone
 (the `extract` command, or `prompts/extract.md` pasted into any agent),
 or as a step inside a drain (`docs/agents/drain.md`). Like the drain, any
@@ -36,7 +36,7 @@ unchanged; look at those before deciding a re-visit is needed.
 
 `scripts/capture.js` injects `scripts/harvest-design.js` into the settled page and writes its
 return value to `harvest.json` in the capture's working directory — the digest
-described in `CONTEXT.md`'s **Harvest** entry: colours ranked by painted area, font clusters, a
+described in `docs/CONTEXT.md`'s **Harvest** entry: colours ranked by painted area, font clusters, a
 spacing histogram, the radius and shadow sets, container widths, and a `notes` array flagging
 anything the harvest itself couldn't see (a thin DOM, a canvas-dominated viewport, skipped
 cross-origin iframes). Record `notes` — they are the harvest's own account of its blind spots, and

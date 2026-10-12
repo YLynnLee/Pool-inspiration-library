@@ -36,5 +36,5 @@ drain the agent reads text from websites you captured, and a hostile page could 
 
 ## Reporting a vulnerability
 
-Please open a [private security advisory](../../security/advisories/new) on this repository rather
+Please open a [private security advisory](https://github.com/YLynnLee/Pool-inspiration-library/security/advisories/new) on this repository rather
 than a public issue.

@@ -12,7 +12,7 @@ prompting guides agree on. Sources, last read 2026-09-21:
 The prompt is a text-to-image prompt with no reference images. The guides' sections on editing,
 multi-image input, transparent backgrounds and web-search grounding don't apply.
 
-## Hard rules (from `CONTEXT.md`)
+## Hard rules (from `docs/CONTEXT.md`)
 
 - Dense visual description of the reference's look.
 - **No interface vocabulary.** Never mention websites, pages, layout, buttons, navigation, hero

@@ -1,6 +1,6 @@
 Drain the inbox of this Pool repo by following the procedure in
 `docs/agents/drain.md` exactly. Read it first; it is the single source of truth. Vocabulary
-(capture, inbox, drain, park, draft, resolve) is defined in `CONTEXT.md`.
+(capture, inbox, drain, park, draft, resolve) is defined in `docs/CONTEXT.md`.
 
 You do the looking and the writing; scripts do the mechanics. Never hand-edit `inbox.md` or
 anything in `data/` during a drain:

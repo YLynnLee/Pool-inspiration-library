@@ -47,7 +47,7 @@ describe.
 3. Run `npm test` before opening the PR. CI runs the same suite on Node 20 for pushes and PRs to
    `main`.
 4. Don't commit secrets, API keys, or `.drain.config.json`. Keys belong in the OS keychain, not
-   the repo (see `SECURITY.md`).
+   the repo (see `.github/SECURITY.md`).
 
 ## Adding a reference to the library
 

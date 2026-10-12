@@ -5,8 +5,8 @@ const os = require('node:os');
 const path = require('node:path');
 const childProcess = require('node:child_process');
 const lib = require('../scripts/drain-lib.js');
-const { LIBRARY } = require('../data/library.js');
-const { CATEGORIES } = require('../data/categories.js');
+const { LIBRARY } = require('./fixtures/data/library.js');
+const { CATEGORIES } = require('./fixtures/data/categories.js');
 
 const ROOT = path.resolve(__dirname, '..');
 
@@ -132,7 +132,8 @@ test('upsertDesignSystem replaces in place or appends', () => {
 
 test('commit.js writes screenshots, reference, design system and strikes the line, in a scratch copy', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'drain-commit-'));
-  ['js', 'data', 'scripts'].forEach((d) => fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true }));
+  ['js', 'scripts'].forEach((d) => fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true }));
+  fs.cpSync(path.join(__dirname, 'fixtures', 'data'), path.join(dir, 'data'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'images'));
   const result = makeResult();
   fs.writeFileSync(path.join(dir, 'inbox.md'), '# Inbox\n- https://keep.example\n' + result.line + '\n');

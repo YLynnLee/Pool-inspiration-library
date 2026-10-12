@@ -27,7 +27,7 @@ How Pool is built, and what lives where.
 
 ```
 ├── index.html                 # Entry point
-├── css/style.css              # Styles (see DESIGN.md)
+├── css/style.css              # Styles (see docs/DESIGN.md)
 ├── js/
 │   ├── render.js              # Grid, filters, detail page tabs
 │   ├── ai-panel.js            # Connect AI + drain state (talks to the helper)
@@ -58,15 +58,15 @@ How Pool is built, and what lives where.
 │   ├── setup.md               # Install and first run
 │   ├── troubleshooting.md     # When something doesn't work
 │   ├── developers.md          # This file
+│   ├── CONTEXT.md             # Glossary of the project's terms
+│   ├── DESIGN.md              # Pool's own design system
 │   └── agents/                # Agent procedures: drain, extract, result format
 ├── prompts/                   # Tool-neutral drain/extract prompts to paste
 ├── .claude/ .opencode/ .gemini/   # /drain and /extract commands per agent
 ├── AGENTS.md                  # Agent instructions (CLAUDE.md / GEMINI.md import it)
 ├── Start Pool.command / .bat  # Double-click launchers
 ├── inbox.md                   # Captured links awaiting a drain
-├── CONTEXT.md                 # Glossary of the project's terms
-├── DESIGN.md                  # Pool's own design system
-└── SECURITY.md                # What stays local, what leaves, how keys are stored
+└── .github/                   # CI, issue templates, SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md
 ```
 
 ## Design
@@ -75,7 +75,7 @@ Pool's own interface follows **"The Midnight Gallery"**: a near-black, near-mono
 (obsidian → graphite → steel) where the only accent is white itself, used for whatever you're
 deciding on. Chrome carries no colour, so the colour on screen comes from the references. Titles are
 set in Fraunces italic, body text in Inter, and every label, count and badge in tracked uppercase
-monospace. Draft amber is reserved for parked references. See [DESIGN.md](../DESIGN.md).
+monospace. Draft amber is reserved for parked references. See [DESIGN.md](DESIGN.md).
 
 ## Tests
 
@@ -84,7 +84,7 @@ npm test
 ```
 
 The suite needs no browser. CI runs it on every push and pull request to `main`. See
-[CONTRIBUTING.md](../CONTRIBUTING.md) before opening a PR.
+[CONTRIBUTING.md](../.github/CONTRIBUTING.md) before opening a PR.
 
 ---
 

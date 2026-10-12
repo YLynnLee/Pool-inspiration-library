@@ -274,7 +274,7 @@ to restore it from.
   only ever sent to their own provider over https. `.drain.config.json` only records *which* AI you
   picked, and it's gitignored.
 
-Full details are in [SECURITY.md](SECURITY.md).
+Full details are in [SECURITY.md](.github/SECURITY.md).
 
 ### The one real risk
 
@@ -305,8 +305,8 @@ stay safe:
 - **[Setting up](docs/setup.md)** — install Pool and start the app for the first time.
 - **[Troubleshooting](docs/troubleshooting.md)** — when something doesn't work.
 - **[For developers](docs/developers.md)** — how Pool is built, and the project structure.
-- **[SECURITY.md](SECURITY.md)** — what stays local, what leaves, and how keys are stored.
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — before opening a PR.
+- **[SECURITY.md](.github/SECURITY.md)** — what stays local, what leaves, and how keys are stored.
+- **[CONTRIBUTING.md](.github/CONTRIBUTING.md)** — before opening a PR.
 
 ---
 
