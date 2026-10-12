@@ -738,7 +738,7 @@ async function openConnected(app) {
   await dialog(app).locator('select[aria-label="Model"]:not([hidden])').waitFor({ timeout: 5000 });
 }
 
-test('connected: only the connection — model dropdown with the app\'s models and an Automatic choice, Use this model only for a different one', async (t) => {
+test('connected: only the connection — model dropdown with the app\'s models and an Automatic choice, no separate save button', async (t) => {
   const fake = createFakeAi({ detect: claudeApp(true, 'yes'), models: MODELS });
   fake.setConnection(CLAUDE_ON);
   await withApp(t, { ai: fake, inbox: waiting(2) }, async (app) => {
@@ -747,13 +747,11 @@ test('connected: only the connection — model dropdown with the app\'s models a
     assert.deepEqual(options.map((s) => s.trim()), ['Automatic (Claude chooses)', 'Sonnet 5.5', 'Opus 5.5']);
     assert.equal(await dialog(app).locator('.cp-handoff').count(), 0, 'no hand-off when merely opening the window');
     assert.equal(await dialog(app).getByText(/Setup steps/i).count(), 0);
-    assert.equal(await buttonNamed(app, 'Use this model').isDisabled(), true, 'nothing changed yet');
-    await dialog(app).locator('select[aria-label="Model"]').selectOption('opus');
-    assert.equal(await buttonNamed(app, 'Use this model').isDisabled(), false);
+    assert.equal(await dialog(app).getByRole('button', { name: 'Use this model' }).count(), 0, 'choosing a model applies it');
   });
 });
 
-test('model change: it re-checks, then shows the success notice once, updates the header and pulses it', async (t) => {
+test('model change: choosing one re-checks, then shows the success notice once, updates the header and pulses it', async (t) => {
   const fake = createFakeAi({
     detect: claudeApp(true, 'yes'),
     models: MODELS,
@@ -763,7 +761,6 @@ test('model change: it re-checks, then shows the success notice once, updates th
   await withApp(t, { ai: fake }, async (app) => {
     await openConnected(app);
     await dialog(app).locator('select[aria-label="Model"]').selectOption('opus');
-    await buttonNamed(app, 'Use this model').click();
     const notice = dialog(app).locator('.notice.is-success');
     await notice.waitFor({ timeout: 5000 });
     assert.match(await notice.innerText(), /Now using Opus 5\.5/);
@@ -771,7 +768,6 @@ test('model change: it re-checks, then shows the success notice once, updates th
     assert.deepEqual(fake.calls.filter((c) => c.name === 'connect').pop().arg.agent, { model: 'opus' });
     await app.page.waitForFunction(() => /Opus 5\.5/.test(document.querySelector('.ai-header').textContent));
     assert.equal(await header(app).evaluate((b) => b.classList.contains('is-updated')), true, 'the header button pulses');
-    assert.equal(await buttonNamed(app, 'Use this model').isDisabled(), true, 'the new model is the saved one');
     await app.page.keyboard.press('Escape');
     await openConnected(app);
     assert.equal(await dialog(app).locator('.notice.is-success').count(), 0, 'shown once');
@@ -787,10 +783,11 @@ test('model change: a failing check keeps the old model and says so', async (t) 
   fake.setConnection(CLAUDE_ON);
   await withApp(t, { ai: fake }, async (app) => {
     await openConnected(app);
+    const before = await dialog(app).locator('select[aria-label="Model"]').inputValue();
     await dialog(app).locator('select[aria-label="Model"]').selectOption('opus');
-    await buttonNamed(app, 'Use this model').click();
     const notice = dialog(app).locator('.notice.is-error');
     await notice.waitFor({ timeout: 5000 });
+    assert.equal(await dialog(app).locator('select[aria-label="Model"]').inputValue(), before, 'the dropdown goes back to the model in use');
     assert.match(await notice.innerText(), /previous model/i);
     assert.equal(await dialog(app).locator('.notice.is-success').count(), 0);
     assert.match(await header(app).innerText(), /Sonnet 5\.5/);

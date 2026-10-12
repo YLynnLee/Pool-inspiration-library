@@ -1312,32 +1312,34 @@
   }
 
   // Picks the model this AI drains with. An agent app gets an "Automatic" choice
-  // plus its models (or a typed name); an API gets its model list.
+  // plus its models (or a typed name); an API gets its model list. Choosing a
+  // model switches to it straight away; a typed name switches on Enter or blur.
   function modelPicker(block, config, running) {
     var agentMode = config.mode === 'agent';
     var current = agentMode ? config.agent.model || '' : config.api.model;
     var OTHER_MODEL = '\u0000other';
     var appName = (window.LinkStatus.describeAi(config) || {}).name || 'the app';
     var status = statusSlot();
-    var select = el('select', { class: 'add-modal-input', 'aria-label': 'Model', hidden: 'hidden' });
-    var typed = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Model name', placeholder: 'Model name', hidden: 'hidden' });
-    var save = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Use this model', disabled: true });
+    var select = el('select', { class: 'add-modal-input', 'aria-label': 'Model', hidden: 'hidden', disabled: running });
+    var typed = el('input', { class: 'add-modal-input ai-mono', type: 'text', spellcheck: 'false', 'aria-label': 'Model name', placeholder: 'Model name, then Enter', hidden: 'hidden', disabled: running });
+    var switching = false;
     block.appendChild(el('label', { class: 'add-modal-label', text: 'Model' }));
-    block.appendChild(el('div', { class: 'ai-row' }, [select, typed, save]));
+    block.appendChild(el('div', { class: 'ai-row' }, [select, typed]));
     block.appendChild(status);
 
     function chosen() {
       return select.hidden || select.value === OTHER_MODEL ? typed.value.trim() : select.value;
     }
-    function changed() {
-      save.disabled = running || chosen() === current || (!agentMode && !chosen());
-    }
     select.addEventListener('change', function () {
       typed.hidden = select.value !== OTHER_MODEL;
-      if (!typed.hidden) typed.focus();
-      changed();
+      if (!typed.hidden) {
+        typed.focus();
+        return;
+      }
+      switchModel();
     });
-    typed.addEventListener('input', changed);
+    // 'change' fires on Enter and when the field loses focus.
+    typed.addEventListener('change', switchModel);
 
     api('POST', '/api/models', { mode: config.mode }).then(function (r) {
       var options = r.models.map(function (m) {
@@ -1352,7 +1354,6 @@
       });
       select.value = current;
       select.hidden = false;
-      changed();
     }, function (err) {
       if (err.helperDown) return;
       // No list to pick from (the key or server can't list models): a typed
@@ -1360,23 +1361,32 @@
       typed.hidden = false;
       typed.value = current;
       window.UI.setNotice(status, 'warning', { title: 'Couldn’t list models', text: plainFailure(err.message) + ' Type a model name instead.' });
-      changed();
     });
 
-    save.addEventListener('click', function () {
+    function switchModel() {
       var model = chosen();
-      save.disabled = true;
+      if (switching || running || model === current || (!agentMode && !model)) return;
+      switching = true;
+      select.disabled = typed.disabled = true;
       setStatus(status, 'info', agentMode ? 'Checking it answers…' : 'Checking it can see images…', agentMode ? 'This can take up to a minute.' : null);
       setModel(model).then(function () {
         var now = window.LinkStatus.describeAi(cached.config);
         ui.modelNotice = { title: 'Now using ' + ((now && now.model) || (model ? window.LinkStatus.modelName(model) : 'automatic model choice')), text: 'Your next analyses use it.' };
         renderPane();
       }).catch(function (err) {
+        switching = false;
+        select.disabled = typed.disabled = false;
         if (err.helperDown) return;
         setStatus(status, 'error', 'Couldn’t switch model', plainFailure(err.message) + ' Still using the previous model.');
-        save.disabled = false;
+        // Show the model still in use, not the one that failed.
+        if (!select.hidden) {
+          select.value = current;
+          typed.hidden = true;
+        } else {
+          typed.value = current;
+        }
       });
-    });
+    }
   }
 
   // Clears only the connection. Where the pane lands follows from what the
