@@ -281,6 +281,11 @@ kbd,
 
 /* ---- All / Drafts / Hidden ---- */
 
+/* An empty slot would still cost the filter bar's 12px gap. */
+.segments-slot:empty {
+  display: none;
+}
+
 .segmented {
   display: inline-flex;
   gap: 2px;
