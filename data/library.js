@@ -96,6 +96,36 @@ const LIBRARY = [
     createdAt: '2026-10-12T14:57:51.642Z',
     ownerId: 'local',
   },
+  {
+    id: 'mistral',
+    name: 'Mistral — Sovereign AI',
+    sourceUrl: 'https://mistral.ai/',
+    category: 'product-platform-light',
+    summary:
+      'A paper-white enterprise AI site ruled into a hairline grid and enlivened by a pixel-art world: a black cat, a flag, and stepped blocks of amber and vermilion fill the margins around a huge, tight grotesque headline. Products are shown as miniature interfaces floating on saturated orange and yellow colour fields, and a single blood-red quote panel breaks the calm before a footer of striped sunset bands under a blocky M.',
+    keywords: [
+      'pixel-art mascot and flag',
+      'hairline grid frame',
+      'stepped amber and vermilion blocks',
+      'tight medium-weight grotesque headline',
+      'interface miniature on orange field',
+      'floating concept chips on connector lines',
+      'black login block in the nav',
+      'sidebar section index',
+      'blood-red quote panel',
+      'striped sunset footer under blocky M',
+    ],
+    palette: ['#FBFBF8', '#F5F4EF', '#18181B', '#151524', '#000000', '#FF5229', '#FF8204', '#E51300', '#E4E3DE'],
+    typeNotes:
+      'ALTMistral, a tight medium-weight grotesque, does the display work at weight 500: 96px at line height 1 and -2% tracking for the hero, 56px and 44px for section statements, 32px and 24px for tile and card titles, and 16px with slight positive tracking for the navigation. Inter at 16–20px, weight 400, sets descriptions, quotes attributions and the footer legal line. Every headline is tracked negative and set at or just above line height 1.',
+    imagePrompt:
+      'A flat 8-bit pixel-art illustration of a tiny black cat with an orange collar sitting on a stepped plinth built from blocks of amber yellow and vermilion orange, beside a small pixel flag on a pale blue pole and a miniature pixel castle and factory in the distance. Two large vermilion diamonds hover at the right edge. Wide, centred, straight-on composition with a perfectly flat orthographic view and crisp square pixels. Even, shadowless light that gives a playful, calm mood. Retro video-game sprite style on a clean warm paper-white field, fine hairline grid lines crossing the background. Paper white (#FBFBF8), near-black (#18181B), amber (#FF8204), vermilion (#FF5229), no text, no watermark, no logos.',
+    brief:
+      '[YOUR SUBJECT] opened by a huge, tightly set medium-weight grotesque headline on a warm paper-white ground ruled into a hairline grid, with a pixel-art mascot and stepped amber and vermilion blocks living in the margins. Introduce each offering as a miniature interface floating on a saturated orange or yellow colour field, list concepts as small chips joined by thin connector lines, add a sidebar index that highlights the active section, and break the calm with one blood-red full-bleed quote panel. End with striped sunset bands beneath a large blocky pixel logo.',
+    screenshots: ['images/mistral.webp', 'images/mistral-2.webp', 'images/mistral-3.webp', 'images/mistral-4.webp', 'images/mistral-5.webp'],
+    createdAt: '2026-10-12T15:29:59.944Z',
+    ownerId: 'local',
+  },
 ];
 
 if (typeof module !== 'undefined' && module.exports) {

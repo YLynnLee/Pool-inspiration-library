@@ -824,10 +824,20 @@
       title: hex,
       style: 'background-color:' + hex,
     });
-    swatch.appendChild(el('span', { class: 'swatch-hex', text: hex }));
+    var pill = el('span', { class: 'swatch-hex', text: hex });
+    swatch.appendChild(pill);
+    var timer = null;
     swatch.addEventListener('click', function () {
       copyText(hex, function (ok) {
-        flashCopied(swatch, ok ? 'Copied!' : 'Copy failed');
+        // Only the pill's text changes; flashCopied would replace the
+        // button's children and lose the pill's styling for good.
+        window.clearTimeout(timer);
+        pill.textContent = ok ? 'Copied' : 'Copy failed';
+        swatch.classList.add('is-copied');
+        timer = window.setTimeout(function () {
+          pill.textContent = hex;
+          swatch.classList.remove('is-copied');
+        }, 1400);
       });
     });
     return swatch;
