@@ -144,7 +144,7 @@ button {
 
 .search-wrap {
   position: relative;
-  flex: 1 1 100%;
+  flex: 1 1 320px;
   min-width: 0;
 }
 
