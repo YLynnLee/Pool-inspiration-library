@@ -25,7 +25,7 @@ without `--dry-run`.
 
   "reference": {
     "id": "example",                  // kebab-case, unique in data/library.js
-    "name": "Example — Studio Site",
+    "name": "Example",                // the site's name only, no tagline or descriptor
     "sourceUrl": "https://example.com", // exactly the inbox line's URL
     "category": "terminal-noir",      // an existing id in data/categories.js, or newCategory.id
     "summary": "…",

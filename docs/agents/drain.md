@@ -60,7 +60,8 @@ For a single capture `{ url, note, line, duplicate }`:
      its own. Extraction just produces a thinner design system.
 3. **Analyse.** Write every reference field (`docs/agents/drain-result.md`): `id`, `name`,
    `sourceUrl`, `category`, `summary`, `keywords`, `palette`, `typeNotes`, `imagePrompt`, `brief`.
-   Nothing is left blank or a placeholder. If `note` is non-empty, let it visibly shape the
+   `name` is the site's name alone ("Mistral", not "Mistral — Sovereign AI"): no tagline or
+   descriptor. Nothing is left blank or a placeholder. If `note` is non-empty, let it visibly shape the
    analysis — the summary or keywords should reflect what the collector said caught their eye, not
    just what's independently visible in the screenshot.
 

@@ -614,6 +614,7 @@
   function buildTile(entry, isHidden) {
     var category = window.getCategory(entry.category);
     var isDraft = window.isDraft(entry);
+    // Names read "Site — Tagline"; the grid shows just the site.
     var tile = el('div', {
       class: 'tile' + (isHidden ? ' is-hidden' : '') + (isDraft ? ' is-draft' : ''),
     });
@@ -635,7 +636,7 @@
     }
 
     var meta = el('div', { class: 'tile-meta' }, [
-      el('span', { class: 'tile-name', text: entry.name }),
+      el('span', { class: 'tile-name', text: entry.name.split(/\s+[—–-]\s+/)[0] }),
       el('span', { class: 'tile-category', text: category ? category.name : entry.category }),
     ]);
     if (isDraft && entry.draftReason) {
