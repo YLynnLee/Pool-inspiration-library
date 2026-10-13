@@ -3,7 +3,7 @@
 | Problem | Fix |
 | --- | --- |
 | **"One-time setup: start Pool"** keeps showing | The `pool://` link isn't registered yet. Double-click `Start Pool` once by hand. |
-| Mac says `Start Pool` is from an unidentified developer | Right-click → **Open**, or **System Settings → Privacy & Security → Open Anyway**. |
+| Mac says "Apple could not verify `Start Pool.command` is free of malware" | Click **Done**, then **System Settings → Privacy & Security → Open Anyway** (scroll to Security). Or run `sh "Start Pool.command"` in Terminal. See [Setting up](setup.md#2-start-pool-for-the-first-time). |
 | "Pool needs Node.js" | Install Node.js 20+ from [nodejs.org](https://nodejs.org/en/download), then start Pool again. |
 | "Can't reach the library helper" | The helper stopped. Double-click `Start Pool`, or click **Connect AI** to start it in the background. |
 | Adding a link says the browser can't write files | Use Chrome, Edge, Arc or Brave, not Safari or Firefox. |

@@ -1110,13 +1110,48 @@
     ['letterSpacing', 'letter-spacing'],
   ];
 
-  function typeSpecimenStyle(token) {
+  // A site's own font (DysonFutura, a licensed face) isn't loaded on this
+  // page, so a bare `font-family: DysonFutura` silently renders in the
+  // browser default. Append the entry's recorded substitutes so the
+  // specimen lands on a close lookalike (Jost, bundled, for Futura).
+  function cssFamily(name) {
+    return /^[\w-]+$/.test(name) ? name : '"' + name.replace(/"/g, '') + '"';
+  }
+
+  function specimenFamilyStack(family, fonts) {
+    var declared = String(family).split(',')[0].trim().replace(/^["']|["']$/g, '');
+    var match = (fonts || []).filter(function (f) {
+      return f.family === declared;
+    })[0];
+    if (!match || !match.substitutes || !match.substitutes.length) return family;
+    var stack = [declared].concat(match.substitutes);
+    return stack.map(function (n) { return /^(serif|sans-serif|monospace|cursive|fantasy|system-ui|ui-[\w-]+)$/.test(n) ? n : cssFamily(n); }).join(', ');
+  }
+
+  // True when `name` renders as itself, i.e. it is installed or bundled.
+  // Measures a probe string against two generic baselines: a real face
+  // differs from at least one of them.
+  var fontProbeCtx = null;
+  function fontAvailable(name) {
+    if (!fontProbeCtx) fontProbeCtx = document.createElement('canvas').getContext('2d');
+    var text = 'mmmmmmmmmmlliWQ@#0123';
+    return ['monospace', 'serif'].some(function (base) {
+      fontProbeCtx.font = '72px ' + base;
+      var baseWidth = fontProbeCtx.measureText(text).width;
+      fontProbeCtx.font = '72px ' + cssFamily(name) + ', ' + base;
+      return fontProbeCtx.measureText(text).width !== baseWidth;
+    });
+  }
+
+  function typeSpecimenStyle(token, fonts) {
     return TYPE_SPECIMEN_STYLE_PROPS
       .filter(function (pair) {
         return token[pair[0]] !== undefined && token[pair[0]] !== null;
       })
       .map(function (pair) {
-        return pair[1] + ':' + token[pair[0]];
+        var value = token[pair[0]];
+        if (pair[0] === 'fontFamily') value = specimenFamilyStack(value, fonts);
+        return pair[1] + ':' + value;
       })
       .join(';');
   }
@@ -1129,6 +1164,27 @@
     if (token.lineHeight !== undefined && token.lineHeight !== null) parts.push(token.lineHeight + ' line-height');
     if (token.letterSpacing) parts.push(token.letterSpacing + ' tracking');
     return parts.join(' · ');
+  }
+
+  // Says which face the specimens above are really drawn in, once fonts
+  // have settled — the source font is usually not available here.
+  function buildFontShownNote(font) {
+    var note = el('p', { class: 'design-fonts-shown' });
+    function update() {
+      var stack = [font.family].concat(font.substitutes);
+      var shown = stack.filter(function (n) {
+        return /^(serif|sans-serif|monospace)$/.test(n) || fontAvailable(n);
+      })[0];
+      if (shown === font.family) note.textContent = '';
+      else if (shown && !/^(serif|sans-serif|monospace)$/.test(shown)) {
+        note.textContent = 'Specimens shown in ' + shown + ' \u2014 ' + font.family + ' is a site font and is not loaded here.';
+      } else {
+        note.textContent = 'Specimens shown in a system font \u2014 ' + font.family + ' is a site font and is not loaded here.';
+      }
+    }
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(update);
+    update();
+    return note;
   }
 
   function buildDesignFontsList(fonts) {
@@ -1147,6 +1203,9 @@
         font.substitutes && font.substitutes.length
           ? el('p', { class: 'design-fonts-substitutes', text: 'Substitute: ' + font.substitutes.join(', ') })
           : null,
+        font.substitutes && font.substitutes.length
+          ? buildFontShownNote(font)
+          : null,
       ]));
     });
     return list;
@@ -1163,7 +1222,7 @@
       tokens.forEach(function (token) {
         var t = typography[token] || {};
         ladder.appendChild(el('div', { class: 'design-type-row' }, [
-          el('div', { class: 'design-type-specimen', style: typeSpecimenStyle(t), text: 'Aa Bg 123' }),
+          el('div', { class: 'design-type-specimen', style: typeSpecimenStyle(t, fonts), text: 'Aa Bg 123' }),
           el('div', { class: 'design-type-meta' }, [
             el('span', { class: 'design-type-token', text: token }),
             el('span', { class: 'design-type-values', text: describeTypeToken(t) }),

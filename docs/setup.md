@@ -36,9 +36,15 @@ point-and-click app.
 
 Double-click **`Start Pool`** inside the folder.
 
-- **Mac:** the first time, macOS may say it's "from an unidentified developer". Right-click the
-  file and choose **Open**. On newer macOS, go to **System Settings → Privacy & Security** and
-  click **Open Anyway**. You only need to do this once.
+- **Mac:** the first time, macOS may say **"Apple could not verify "Start Pool.command" is free
+  of malware"** (files downloaded from the internet are quarantined). Click **Done**, then:
+  1. Open **System Settings → Privacy & Security**.
+  2. Scroll to **Security**, find the note about `Start Pool.command` and click **Open Anyway**.
+  3. Enter your password, then click **Open** in the next prompt.
+
+  You only need to do this once. On older macOS, right-click the file and choose **Open** instead.
+  Prefer the terminal? Run `sh "Start Pool.command"` from the folder, or
+  `xattr -d com.apple.quarantine "Start Pool.command"` and then double-click it again.
 - **Windows:** double-click `Start Pool.bat`. If SmartScreen appears, click **More info → Run
   anyway**.
 - **Linux:** there's no double-click launcher. Run `sh scripts/start.sh` from the folder.
