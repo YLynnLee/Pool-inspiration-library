@@ -20,6 +20,20 @@
   font-display: swap;
   src: url('../fonts/inter-variable.woff2') format('woff2');
 }
+@font-face {
+  font-family: 'Jost';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fonts/jost-variable.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Jost';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fonts/jost-variable-italic.woff2') format('woff2');
+}
 
 :root {
   /* Obsidian canvas, stepping up through Graphite/Steel rather than shadow. */
@@ -1031,14 +1045,16 @@ kbd,
 
 .design-fonts-role,
 .design-fonts-range,
-.design-fonts-substitutes {
+.design-fonts-substitutes,
+.design-fonts-shown {
   margin: 4px 0 0;
   font-size: 13px;
   line-height: 1.55;
   color: var(--text-dim);
 }
 
-.design-fonts-substitutes {
+.design-fonts-substitutes,
+.design-fonts-shown {
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--text-faint);
